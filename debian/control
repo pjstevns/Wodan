@@ -1,11 +1,11 @@
-Source: libapache2-mod-wodan
+Source: libapache2-mod-wodan2
 Section: web
 Priority: optional
 Maintainer: Paul J Stevens <paul@nfg.nl>
 Build-Depends: debhelper (>> 3.0.0), dpatch, apache2-threaded-dev (>= 2.2.3-4+etch4)
 Standards-Version: 3.7.2
 
-Package: libapache2-mod-wodan
+Package: libapache2-mod-wodan2
 Architecture: any
 Depends: apache2.2-common, ${shlibs:Depends}
 Description: Caching proxy module for apache-2.2

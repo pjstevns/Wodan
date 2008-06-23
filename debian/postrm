@@ -15,7 +15,7 @@ killconf () {
 	then
 	  tmpfile=/etc/apache$1/modules.conf.tmp.$$
 	  cat /etc/apache$1/modules.conf |\
-		   sed 's/^\(LoadModule.*mod_wodan\.so\)/#\1/' > $tmpfile
+		   sed 's/^\(LoadModule.*mod_wodan2\.so\)/#\1/' > $tmpfile
 	  mv -f $tmpfile /etc/apache$1/modules.conf
 	  ask_restart "$1"
 	fi
