@@ -39,6 +39,7 @@ clean1:
 	-$(MAKE) clean || true
 	rm -f build-stamp configure-stamp config.h config.log config.status Makefile || true
 	rm -f *.o
+	rm -rf .libs
 	rm -f mod_wodan2.so || true
 	dh_clean
 
@@ -49,8 +50,8 @@ install: build
 	dh_installdirs
 
 	# Add here commands to install the package into debian/libapache2-mod-wodan2.
-	install -m 644 mod_wodan2.so $(CURDIR)/debian/libapache2-mod-wodan2/usr/lib/apache2/modules
-	install -m 644 debian/600mod_wodan2.info $(CURDIR)/debian/libapache2-mod-wodan2/usr/lib/apache2/modules
+	install -m 644 .libs/mod_wodan2.so $(CURDIR)/debian/libapache2-mod-wodan2/usr/lib/apache2/modules/
+	install -m 644 debian/600mod_wodan2.info $(CURDIR)/debian/libapache2-mod-wodan2/usr/lib/apache2/modules/
 
 
 # Build architecture-independent files here.
