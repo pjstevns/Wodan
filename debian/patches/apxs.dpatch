@@ -6,10 +6,13 @@
 
 @DPATCH@
 diff -urNad wodan2~/Makefile.in wodan2/Makefile.in
---- wodan2~/Makefile.in	2008-06-23 10:08:01.000000000 +0200
-+++ wodan2/Makefile.in	2008-06-23 10:08:35.000000000 +0200
-@@ -10,7 +10,7 @@
- include $(apache_dir)/build/special.mk
+--- wodan2~/Makefile.in	2008-06-23 10:31:56.000000000 +0200
++++ wodan2/Makefile.in	2008-06-23 10:32:42.000000000 +0200
+@@ -7,10 +7,9 @@
+ builddir=.
+ top_srcdir=$(apache_dir)
+ top_builddir=$(apache_dir)
+-include $(apache_dir)/build/special.mk
  
  #   the used tools
 -APXS=$(apache_dir)/bin/apxs
@@ -17,19 +20,51 @@ diff -urNad wodan2~/Makefile.in wodan2/Makefile.in
  APACHECTL=$(apache_dir)/bin/apachectl
  
  SOURCE_FILES=mod_wodan2.c cache.c httpclient.c networkconnector.c match.c util.c 
+@@ -21,7 +20,6 @@
+ #DEFS=-Dmy_define=my_value
+ DEFS=-W -Wall -Wpointer-arith -Wstrict-prototypes
+ INCLUDES=-I$(apache_dir)/include
+-#LIBS=-Lmy/lib/dir -lmylib
+ 
+ #   the default target
+ all: mod_wodan.so
+@@ -39,23 +37,6 @@
+ clean:
+ 	-rm -f *o *lo *slo *la mod_wodan.so 
+ 
+-#   simple test
+-test: reload
+-	lynx -mime_header http://localhost/wodan2
+-
+-#   install and activate shared object by reloading Apache to
+-#   force a reload of the shared object file
+-reload: install restart
+-
+-#   the general Apache start/restart/stop
+-#   procedures
+-start:
+-	$(APACHECTL) start
+-restart:
+-	$(APACHECTL) restart
+-stop:
+-	$(APACHECTL) stop
+-
+ # only for development:
+ -include $(OBJECT_FILES:.o=.d)
+ 
 diff -urNad wodan2~/configure.in wodan2/configure.in
---- wodan2~/configure.in	2008-06-23 10:08:01.000000000 +0200
-+++ wodan2/configure.in	2008-06-23 10:08:35.000000000 +0200
+--- wodan2~/configure.in	2008-06-23 10:31:56.000000000 +0200
++++ wodan2/configure.in	2008-06-23 10:32:42.000000000 +0200
 @@ -17,7 +17,7 @@
  # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  
  AC_PREREQ(2.57)
 -AC_INIT()
-+AC_INIT(2.2)
++AC_INIT([wodan], [2.2.0], [wodan@ic-s.nl])
  # Checks for programs.
  AC_PROG_CC
  
-@@ -28,31 +28,94 @@
+@@ -28,33 +28,97 @@
  # Checks for typedefs, structures, and compiler characteristics.
  
  # Checks for library functions.
@@ -66,8 +101,8 @@ diff -urNad wodan2~/configure.in wodan2/configure.in
 +  ],[
 +      AC_MSG_RESULT(no)
 +  ])
- ])
- 
++])
++
 +AC_DEFUN([APACHE_APXS],[
 +	AC_MSG_CHECKING([for dynamic Apache module support (via APXS)])
 +	AC_ARG_WITH(apxs,
@@ -114,7 +149,7 @@ diff -urNad wodan2~/configure.in wodan2/configure.in
 +fi
 +
 +if test -n "$APXS"; then
-+	if test -z "`$APXS -q LD_SHLIB`" || test "$APXS_LIBEXEC" = "modules"; then
++	if test -z "`$APXS -q INCLUDEDIR`" || test "$APXS_LIBEXEC" = "modules"; then
 +	AC_MSG_ERROR(
 +			[Your APXS installation is broken and cannot be used.])
 +
@@ -130,10 +165,14 @@ diff -urNad wodan2~/configure.in wodan2/configure.in
 +	fi
 +fi
 +
-+])
-+
+ ])
+ 
 +
 +
  # call custom functions
- CHECK_APACHE_DIR
+-CHECK_APACHE_DIR
++APACHE_DIR
++APACHE_APXS
+ 
+ AC_SUBST(apache_dir)
  

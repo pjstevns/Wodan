@@ -9,8 +9,8 @@
 export DH_COMPAT=4
 
 # dpatch
-export PACKAGE=wodan
-export PACKAGES=wodan
+export PACKAGE=wodan2
+export PACKAGES=wodan2
 
 include /usr/share/dpatch/dpatch.make
 
@@ -49,8 +49,8 @@ install: build
 	dh_installdirs
 
 	# Add here commands to install the package into debian/libapache-mod-wodan.
-	install -m 644 mod_wodan.so $(CURDIR)/debian/libapache-mod-wodan/usr/lib/apache2/modules
-	install -m 644 debian/600mod_wodan.info $(CURDIR)/debian/libapache-mod-wodan/usr/lib/apache2/modules
+	install -m 644 mod_wodan.so $(CURDIR)/debian/libapache2-mod-wodan/usr/lib/apache2/modules
+	install -m 644 debian/600mod_wodan.info $(CURDIR)/debian/libapache2-mod-wodan/usr/lib/apache2/modules
 
 
 # Build architecture-independent files here.
