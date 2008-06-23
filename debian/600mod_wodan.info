@@ -1,0 +1,14 @@
+LoadModule: wodan_module /usr/lib/apache2/modules/mod_wodan.so
+Directives:
+	ReverseProxyPass
+	ReverseProxyPassReverse
+	DefaultCacheTime
+	DefaultCacheTimeMatch
+	DefaultCacheTimeHeaderMatch
+	CacheDir
+	CacheDirLevels
+	RunOnCache
+	Cache404s
+	BackendTimeout
+Description: Support for caching reverse proxy
+    
