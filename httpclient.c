@@ -422,15 +422,19 @@ static int receive_complete_response(wodan2_config_t *config,
 		return status;
 	}
 	
-	if ((receive_headers_result = receive_headers(connection, r, httpresponse)) !=
-		OK) 
+	if ((receive_headers_result = receive_headers(connection, r, httpresponse)) != OK) 
 		return receive_headers_result;
 		
-	cache_file = cache_get_cachefile(config, r, httpresponse);
+	
+	if (status == HTTP_OK) {
+		cache_file = cache_get_cachefile(config, r, httpresponse);
+	} else {
+		cache_file = (apr_file_t *)NULL;
+	}
+
 	adjust_headers_for_sending(config, r, httpresponse);
 	
-	if ((receive_body_result = receive_body(config, connection, r, httpresponse, 
-				   cache_file)) != OK)
+	if ((receive_body_result = receive_body(config, connection, r, httpresponse, cache_file)) != OK)
 		return receive_body_result;
 
 	return status;
