@@ -461,7 +461,7 @@ static int wodan2_handler(request_rec *r)
 	httpresponse.headers = apr_table_make(r->pool, 0);
 	
 	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-		     "Processing new request: %s", r->unparsed_uri);
+		     "Processing new request: %s", r->uri);
 
 	// see if the request can be handled from the cache.
 	cache_status = cache_get_status(config, r, &cache_file_time);
@@ -483,7 +483,7 @@ static int wodan2_handler(request_rec *r)
 		{
 			char* newpath;
 			int l = (int) strlen(proxy_destination->path);
-			newpath = &(r->unparsed_uri[l - 1]);
+			newpath = &(r->uri[l - 1]);
 			
 			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
 				     r->server, 
