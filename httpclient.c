@@ -499,7 +499,7 @@ static int receive_headers(network_connection_t *connection, request_rec *r,
             header = strcat(header, read_header);
         }
 
-		key = ap_getword(r->pool, header ? &header: &read_header, ':');
+		key = ap_getword(r->pool, header ? (const char **)&header: &read_header, ':');
 		val = apr_pstrdup(r->pool, header ? header : read_header);
 		val = util_skipspaces(val);
 		
