@@ -14,11 +14,10 @@
 #include "http_log.h"
 #include "apr.h"
 #include "apr_date.h"
-#include "apr_md5.h"
+#include "apr_sha1.h"
 #include "apr_strings.h"
 #include "apr_file_io.h"
 #include "apr_time.h"
-#include "util_md5.h"
 
 #include <string.h>
 
@@ -60,15 +59,13 @@ static char *get_cache_file_subdir(wodan2_config_t *config, request_rec *r,
 	
 /**
  * return the name of the cachefile
- * @param r request record
  * @param config the wodan configuration
- * @param unparsed_uri the unparsed URI
+ * @param r request record
  * @param[out] filename will hold the filename
  * @retval 0 on error
  * @retval 1 on success 
  */
-static int get_cache_filename(wodan2_config_t *config, request_rec *r,
-	char *unparsed_uri, char **filename);
+static int get_cache_filename(wodan2_config_t *config, request_rec *r, char **filename);
 	
 WodanCacheStatus_t cache_get_status(wodan2_config_t *config, request_rec *r, 
 	apr_time_t *cache_file_time)
@@ -88,7 +85,7 @@ WodanCacheStatus_t cache_get_status(wodan2_config_t *config, request_rec *r,
 	if (!is_cachedir_set(config))
 		return WODAN_CACHE_NOT_PRESENT;
 
-	get_cache_filename(config, r, r->unparsed_uri, &cachefilename);
+	get_cache_filename(config, r, &cachefilename);
 	if (apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool)
 		!= APR_SUCCESS) {
 		return WODAN_CACHE_NOT_PRESENT;
@@ -157,7 +154,7 @@ int cache_read_from_cache (wodan2_config_t *config, request_rec *r,
 	int content_length = 0;
 	int body_bytes_written = 0;
 	
-	get_cache_filename(config, r, r->unparsed_uri, &cachefilename);
+	get_cache_filename(config, r, &cachefilename);
 	apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool);
     /* Read url field, but we don't do anything with it */
     apr_file_gets(buffer, BUFFERSIZE, cachefile);
@@ -407,7 +404,7 @@ static apr_file_t *open_cachefile(wodan2_config_t *config, request_rec *r)
 	int result;
 	struct stat dir_status;
 
-	get_cache_filename(config, r, r->unparsed_uri, &cachefilename);	
+	get_cache_filename(config, r, &cachefilename);	
 	for (i = 0; i < config->cachedir_levels; i++) {
 		subdir = get_cache_file_subdir(config, r, cachefilename, i);
 		
@@ -565,7 +562,7 @@ int cache_update_expiry_time(wodan2_config_t *config, request_rec *r)
 	char buffer[BUFFERSIZE];
 	apr_size_t bytes_written;
 
-	get_cache_filename(config, r, r->unparsed_uri, &cachefilename);
+	get_cache_filename(config, r, &cachefilename);
 	// JvH: does this make any sense at all? expire_interval gets overwritten anyway
 	// (void) get_expire_time(config, r, NULL, &expire_interval);
        
@@ -601,16 +598,39 @@ int cache_update_expiry_time(wodan2_config_t *config, request_rec *r)
 
 /** static functions down here */
 
-static int get_cache_filename(wodan2_config_t *config, request_rec *r,
-	char *unparsed_uri, char **filename )
+char * sha1_to_hex(request_rec *r, const unsigned char *sha1)
 {
-	char *md5_checksum;
-	char dir[MAX_CACHEFILE_PATH_LENGTH + 1];
-	char *ptr;
+	static const char hex[] = "0123456789abcdef";
+	char buffer[50], *buf = buffer;
 	int i;
 
-	md5_checksum = ap_md5(r->pool, unparsed_uri);
-	/* If cachedir + subdirs + md5sum don't fit in buffer, 
+	for (i = 0; i < 20; i++) {
+		unsigned int val = *sha1++;
+		*buf++ = hex[val >> 4];
+		*buf++ = hex[val & 0xf];
+	}
+	*buf = '\0';
+
+	return apr_pstrdup(r->pool, buffer);
+}
+
+static int get_cache_filename(wodan2_config_t *config, request_rec *r, char **filename )
+{
+	unsigned char digest[APR_SHA1_DIGESTSIZE];
+	char dir[MAX_CACHEFILE_PATH_LENGTH + 1];
+	char *checksum;
+	char *ptr;
+	int i;
+	struct apr_sha1_ctx_t sha;
+
+	apr_sha1_init(&sha);
+	apr_sha1_update(&sha, r->hostname, strlen(r->hostname));
+	apr_sha1_update(&sha, r->unparsed_uri, strlen(r->unparsed_uri));
+	apr_sha1_final(digest, &sha);
+
+	checksum = sha1_to_hex(r, digest);
+
+	/* If cachedir + subdirs + checksum don't fit in buffer, 
 	 * we have a problem */
 	if (strlen(config->cachedir) > 
 	     (MAX_CACHEFILE_PATH_LENGTH - 32 - (2 * MAX_CACHEDIR_LEVELS))) {
@@ -628,12 +648,12 @@ static int get_cache_filename(wodan2_config_t *config, request_rec *r,
 
 	for (i = 0; i < config->cachedir_levels; i++) {
 		ptr[0] = '/';
-		ptr[1] = md5_checksum[i];
+		ptr[1] = checksum[i];
 		ptr += 2;
 	}
 	*ptr = '\0';
 
-	*filename = ap_make_full_path(r->pool, dir, md5_checksum);
+	*filename = ap_make_full_path(r->pool, dir, checksum);
 	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
 		     "Cachefile pathname: %s", *filename);	
 	return 1;
