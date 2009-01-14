@@ -1,0 +1,1 @@
+LoadModule: wodan2_module /usr/lib/apache2/modules/mod_wodan2.so
