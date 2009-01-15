@@ -2,8 +2,8 @@
  * (c) 2000-2006 IC&S, The Netherlands
  */ 
 
-#define WODAN_NAME "Wodan2"
-#define WODAN_VERSION "0.1"
+#define WODAN_NAME "Wodan"
+#define WODAN_VERSION "2.0.1"
 
 /* constants identifying the source of the returned (to the client) object */
 #define LOG_SOURCE_CACHED "Cached"
@@ -31,7 +31,7 @@
  * Function prototypes.
  */
  
-/* initializer for Wodan2 */
+/* initializer for Wodan */
 static int wodan_init_handler(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp,
 	server_rec *s);
 /* create initial server configuration. */
@@ -73,7 +73,7 @@ static const char *add_backend_timeout(cmd_parms *cmd, void *dummy,
 /* hook registering function */
 static void wodan_register_hooks(apr_pool_t *p);
 	
-/* The content handler function. This is the main function of Wodan2 */
+/* The content handler function. This is the main function of Wodan */
 static int wodan_handler(request_rec *r);
 
 /**
@@ -114,7 +114,7 @@ module AP_MODULE_DECLARE_DATA wodan_module = {
     wodan_register_hooks       /* register hooks                      */
 };
 
-/* initialize Wodan2 */
+/* initialize Wodan */
 static int wodan_init_handler(apr_pool_t *p, 
 	apr_pool_t *plog WODAN_UNUSED_PARAMETER, 
 	apr_pool_t *ptemp WODAN_UNUSED_PARAMETER,

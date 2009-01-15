@@ -68,7 +68,7 @@ static char *get_cache_file_subdir(wodan_config_t *config, request_rec *r,
 static int get_cache_filename(wodan_config_t *config, request_rec *r, char **filename);
 	
 WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, 
-	apr_time_t *cache_file_time)
+		apr_time_t *cache_file_time)
 {
 	char* cachefilename;
 	apr_file_t *cachefile;
@@ -77,7 +77,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r,
 	int interval_time;
 
 	*cache_file_time = (apr_time_t) 0;
-	
+
 	if(r->method_number != M_GET && !r->header_only)
 		return WODAN_CACHE_NOT_CACHEABLE;
 
@@ -87,11 +87,11 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r,
 
 	get_cache_filename(config, r, &cachefilename);
 	if (apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool)
-		!= APR_SUCCESS) {
+			!= APR_SUCCESS) {
 		return WODAN_CACHE_NOT_PRESENT;
 	}
 
-    /* Read url field, but we don't do anything with it */
+	/* Read url field, but we don't do anything with it */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
 	/* read expire interval field, but don't do anything with it */
 	interval_time = 0;
@@ -100,29 +100,24 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r,
 	}
 	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 		apr_time_t cachefile_expire_time;
-		
+
 		/* Parses a date in RFC 822  */
 		if ((cachefile_expire_time = apr_date_parse_http(buffer)) == APR_DATE_BAD) {
 			ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server,
-			"Cachefile date not parsable. Returning \"Expired status\"");
+					"Cachefile date not parsable. Returning \"Expired status\"");
 			return WODAN_CACHE_PRESENT_EXPIRED;
 		}
-		
+
 		/* time - interval_time = time that file was created */
 		*cache_file_time = cachefile_expire_time - apr_time_from_sec(interval_time);
-		
+
 		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			     "Cachefile expires %s (%ld), now %s (%ld)",
-			     ap_ht_time(r->pool,cachefile_expire_time, "%a %d %b %Y %T %Z",1),
-			     (long int) cachefile_expire_time, 
-			     ap_ht_time(r->pool, (r->request_time), 
-					"%a %d %b %Y %T %Z",1), 
-			     (long int) r->request_time);
+				"Cachefile TTL (%ld)", ((long int) cachefile_expire_time - (long int) r->request_time)/1000000);
 
 		if((r->request_time > cachefile_expire_time) && (!config->run_on_cache))
 		{
 			apr_file_close(cachefile);
-	         return WODAN_CACHE_PRESENT_EXPIRED;
+			return WODAN_CACHE_PRESENT_EXPIRED;
 		}
 
 		/* Read empty line before status line */
@@ -131,15 +126,15 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r,
 			status = atoi(buffer);
 			if (status == HTTP_NOT_FOUND) {
 				ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0,
-				             r->server, "File in cache has status 404");
+						r->server, "File in cache has status 404");
 				apr_file_close(cachefile);
 				return WODAN_CACHE_404;
 			}
 		}
-		
+
 		apr_file_close(cachefile);
 		return WODAN_CACHE_PRESENT;
-   	}
+	}
 	apr_file_close(cachefile);
 	return WODAN_CACHE_NOT_PRESENT;
 }
@@ -156,51 +151,51 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r,
 	
 	get_cache_filename(config, r, &cachefilename);
 	apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool);
-    /* Read url field, but we don't do anything with it */
-    apr_file_gets(buffer, BUFFERSIZE, cachefile);
-		
+	/* Read url field, but we don't do anything with it */
+	apr_file_gets(buffer, BUFFERSIZE, cachefile);
+
 	/* same for expire interval field */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
 	/* same for expire field */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
+
 	if(apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 		httpresponse->response = atoi(buffer);
-	}
-	else {
+	} else {
 		//Remove file and return 0
 		apr_file_close(cachefile);
 		apr_file_remove(cachefilename, r->pool);
 		return 0;
 	}
 
-    while(apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
+	while(apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 		int counter = 0;
 		char* key;
 		char* bufferpointer;
-			if(strcasecmp(buffer, CRLF) == 0)
-	         	break;
-             bufferpointer = &buffer[0];
-             key = ap_getword(r->pool, (const char**) &bufferpointer, ':');
-             bufferpointer = util_skipspaces(bufferpointer);
-             while(bufferpointer[counter]) {
-	         	if(bufferpointer[counter] == CR || 
-	                bufferpointer[counter] == LF || 
-	                bufferpointer[counter] == '\n') {
-	             	bufferpointer[counter] = '\0';
-	                 break;
-             	}
-                 counter++;
+		if(strcasecmp(buffer, CRLF) == 0)
+			break;
+		bufferpointer = &buffer[0];
+		key = ap_getword(r->pool, (const char**) &bufferpointer, ':');
+		bufferpointer = util_skipspaces(bufferpointer);
+		while(bufferpointer[counter]) {
+			if(bufferpointer[counter] == CR || 
+					bufferpointer[counter] == LF || 
+					bufferpointer[counter] == '\n') {
+				bufferpointer[counter] = '\0';
+				break;
 			}
-             apr_table_add(httpresponse->headers, key, bufferpointer);
+			counter++;
+		}
+		apr_table_add(httpresponse->headers, key, bufferpointer);
 		if (strncasecmp(key, "Content-Length", 14) == 0)
 			content_length = atoi(bufferpointer);
 	}
 	adjust_headers_for_sending(config, r, httpresponse);
-	
-   	if(r->header_only) {
+
+	if(r->header_only) {
 		return 1;
 	}
-	
+
 	write_error = 0;
 	/* TODO add checking of errors in reading from file */
 	while(!apr_file_eof(cachefile) && !write_error) {
@@ -208,16 +203,16 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r,
 		int bytes_written;
 
 		apr_file_read_full(cachefile, buffer, BUFFERSIZE, &bytes_read);
-		
+
 		bytes_written = ap_rwrite(buffer, bytes_read, r);
 		body_bytes_written += bytes_written;
 		if (((int) bytes_read != bytes_written) || bytes_written == -1) {
 			write_error = 1;
 		}
 		if(bytes_read < BUFFERSIZE)
-	                break;
+			break;
 	}
-	
+
 	/* TODO add error checking for file reading */
 	if (write_error) {
 		const char *user_agent;
@@ -226,16 +221,16 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r,
 		if (user_agent == NULL) 
 			user_agent = "unknown";
 		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, 
-			     "error writing to socket. "
-			     "Bytes written/Body length = %d/%d, "
-			     "User-Agent: %s",
-			     body_bytes_written, content_length, user_agent);
+				"error writing to socket. "
+				"Bytes written/Body length = %d/%d, "
+				"User-Agent: %s",
+				body_bytes_written, content_length, user_agent);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-		"Returned answer from cache");
-		
+			"Returned answer from cachefile: %s", cachefilename);
+
 	return 1;
 }
 
@@ -416,8 +411,7 @@ static apr_file_t *open_cachefile(wodan_config_t *config, request_rec *r)
 	apr_file_open(&cachefile, cachefilename, 
 		APR_WRITE | APR_CREATE | APR_TRUNCATE, APR_OS_DEFAULT,
 		r->pool);
-	if(cachefile == NULL)
-	{
+	if(cachefile == NULL) {
 		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
 			     "Error opening cache file, filename = %s, config->cachedir = %s", 
 			     cachefilename, config->cachedir);
@@ -438,7 +432,7 @@ static int write_preamble(apr_file_t *cachefile, request_rec *r,
 			  char *expire_time_string,
 			  int expire_interval)
 {
-	apr_file_printf(cachefile, "%s%s", r->unparsed_uri, CRLF);
+	apr_file_printf(cachefile, "%s%s%s", r->hostname, r->unparsed_uri, CRLF);
 	apr_file_printf(cachefile, "%d%s", expire_interval, CRLF);
 	apr_file_printf(cachefile, "%s%s", expire_time_string, CRLF);
 	apr_file_printf(cachefile, "%d%s", httpresponse->response, CRLF);
@@ -513,8 +507,7 @@ apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
 	return cache_file;
 }
 
-void cache_close_cachefile(wodan_config_t *config, request_rec *r,
-	apr_file_t *temp_cachefile)
+void cache_close_cachefile(wodan_config_t *config, request_rec *r, apr_file_t *temp_cachefile)
 {
 	apr_file_t *real_cachefile;
 	char buffer[BUFFERSIZE];
@@ -563,13 +556,10 @@ int cache_update_expiry_time(wodan_config_t *config, request_rec *r)
 	apr_size_t bytes_written;
 
 	get_cache_filename(config, r, &cachefilename);
-	// JvH: does this make any sense at all? expire_interval gets overwritten anyway
-	// (void) get_expire_time(config, r, NULL, &expire_interval);
-       
-    if (apr_file_open(&cachefile, cachefilename, APR_READ|APR_WRITE, APR_OS_DEFAULT,
-    		r->pool) != APR_SUCCESS) 
-    		return -1;   
-	
+
+	if (apr_file_open(&cachefile, cachefilename, APR_READ|APR_WRITE, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) 
+		return -1;   
+
 	/* skip URL field */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
 
@@ -581,13 +571,13 @@ int cache_update_expiry_time(wodan_config_t *config, request_rec *r)
 	apr_rfc822_date(expire_time_string, expire_time);
 	/* write new expire time field in cachefile */
 	apr_file_write_full(cachefile, expire_time_string, strlen(expire_time_string),
-		&bytes_written);
+			&bytes_written);
 	if (bytes_written != strlen(expire_time_string)) {
 		ap_log_error(APLOG_MARK, 
-			APLOG_NOERRNO|APLOG_DEBUG, 0,
-			r->server, 
-			"%s: error writing to cachefile", __func__);
-	
+				APLOG_NOERRNO|APLOG_DEBUG, 0,
+				r->server, 
+				"%s: error writing to cachefile", __func__);
+
 		apr_file_close(cachefile);
 		return -1;
 	}
@@ -654,8 +644,6 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 	*ptr = '\0';
 
 	*filename = ap_make_full_path(r->pool, dir, checksum);
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-		     "Cachefile pathname: %s", *filename);	
 	return 1;
 }
 
@@ -686,19 +674,18 @@ static char *get_cache_file_subdir(wodan_config_t *config, request_rec *r,
 
 static int is_response_cacheable (int httpcode, int cache404s)
 {
-	if (cache404s)
-		if (httpcode == 404)
-			return 1;
-
-	if(httpcode >= 200 && httpcode < 400)
+	if ( cache404s && (httpcode == 404))
 		return 1;
-	else return 0;
+
+	if ( (httpcode >= 200) && (httpcode < 400) )
+		return 1;
+
+	return 0;
 }
 
 static int is_cachedir_set(wodan_config_t* config)
 {
-     if (config->is_cachedir_set)
+	if (config->is_cachedir_set)
 		return 1;
-	else 
-		return 0;
+	return 0;
 }
