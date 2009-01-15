@@ -100,7 +100,7 @@ static int send_complete_request(network_connection_t *connection,
  * @param httpresponse will hold response
  * @return OK if finished
  */
-static int receive_complete_response(wodan2_config_t *config,
+static int receive_complete_response(wodan_config_t *config,
 	network_connection_t *connection, request_rec *r,  
 	httpresponse_t *httpresponse);
 
@@ -120,7 +120,7 @@ static int receive_headers(network_connection_t *connection, request_rec *r,
 		     struct httpresponse *httpresponse);
 
 /** receive the body of the response from the backend */
-static int receive_body(wodan2_config_t *config, network_connection_t *connection, 
+static int receive_body(wodan_config_t *config, network_connection_t *connection, 
 	request_rec *r, httpresponse_t *httpresponse, apr_file_t *cache_file);
 /** adjust dates to one form */
 static void adjust_dates(request_rec *r, struct httpresponse *httpresponse);
@@ -136,7 +136,7 @@ static void adjust_dates(request_rec *r, struct httpresponse *httpresponse);
  * @retval OK if all ok
  * @retval HTTP_BAD_GATEWAY if problem connecting or retreiving
  */
-static int do_http_proxy (wodan2_config_t *config, const char* proxyurl, char* uri, 
+static int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* uri, 
 		   struct httpresponse* httpresponse, 
 		   request_rec *r, 
 		   apr_time_t cache_file_time);
@@ -163,7 +163,7 @@ static void ap_reverseproxy_clear_connection(apr_pool_t *p, apr_table_t *headers
  * @retval HTTP_GATEWAY_TIME_OUT if connection to backend timeout out.
  * @retval OK if connection OK.
  */
-int http_proxy(wodan2_config_t *config, const char* proxyurl, char *uri,
+int http_proxy(wodan_config_t *config, const char* proxyurl, char *uri,
 	       struct httpresponse *httpresponse,
 	       request_rec *r,
 	       apr_time_t cache_file_time)
@@ -394,7 +394,7 @@ static int send_request_body(network_connection_t *connection, request_rec *r)
 	return OK;
 }
        
-static int receive_complete_response(wodan2_config_t *config, 
+static int receive_complete_response(wodan_config_t *config, 
 	network_connection_t *connection, request_rec *r, 
 	httpresponse_t *httpresponse) 
 {
@@ -527,7 +527,7 @@ static int receive_headers(network_connection_t *connection, request_rec *r,
 	return OK;
 }
 
-static int receive_body(wodan2_config_t *config, network_connection_t *connection, 
+static int receive_body(wodan_config_t *config, network_connection_t *connection, 
 	request_rec *r, httpresponse_t *httpresponse, apr_file_t *cache_file)
 {
 	char *buffer;
@@ -643,7 +643,7 @@ static void adjust_dates(request_rec *r, struct httpresponse *httpresponse)
 }
 
 
-static int do_http_proxy (wodan2_config_t *config, const char* proxyurl, char* uri, 
+static int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* uri, 
 		   struct httpresponse* httpresponse, 
 		   request_rec *r, apr_time_t cache_file_time)
 {

@@ -20,7 +20,7 @@
  * @param do_ssl 1 if doing SSL connection, 0 otherwise. only used
  * when WODAN_HAVE_SSL is defined.
  */
-network_connection_t* networkconnect (wodan2_config_t *config, char* host, int port, 
+network_connection_t* networkconnect (wodan_config_t *config, char* host, int port, 
 					  request_rec *r,
 					  int do_ssl);
 

@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-network_connection_t* networkconnect (wodan2_config_t *config, char* host, int port, 
+network_connection_t* networkconnect (wodan_config_t *config, char* host, int port, 
 		request_rec *r, int do_ssl WODAN_UNUSED_PARAMETER)
 {
 	network_connection_t* network_connection;

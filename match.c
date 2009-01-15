@@ -16,14 +16,14 @@
 #include "apr_tables.h"
 #include <string.h>
 
-wodan2_proxy_alias_t* alias_longest_match(wodan2_config_t *config, char *uri)
+wodan_proxy_alias_t* alias_longest_match(wodan_config_t *config, char *uri)
 {
-	wodan2_proxy_alias_t *longest, *list;
+	wodan_proxy_alias_t *longest, *list;
 	int length, i;
 
 	longest = NULL;
 	length = 0;
-	list = (wodan2_proxy_alias_t *) config->proxy_passes_reverse->elts;
+	list = (wodan_proxy_alias_t *) config->proxy_passes_reverse->elts;
 	for(i=0; i < config->proxy_passes_reverse->nelts; i++)
 	{
 		int l = (int) strlen(list[i].path);
@@ -37,15 +37,15 @@ wodan2_proxy_alias_t* alias_longest_match(wodan2_config_t *config, char *uri)
 	return longest;
 }
 
-wodan2_proxy_destination_t* destination_longest_match(wodan2_config_t *config, 
+wodan_proxy_destination_t* destination_longest_match(wodan_config_t *config, 
 	char *uri)
 {
-	wodan2_proxy_destination_t *longest, *list;
+	wodan_proxy_destination_t *longest, *list;
 	int length, i;
 
 	longest = NULL;
 	length = 0;
-	list = (wodan2_proxy_destination_t *) config->proxy_passes->elts;
+	list = (wodan_proxy_destination_t *) config->proxy_passes->elts;
 	for(i=0; i < config->proxy_passes->nelts; i++)
 	{
 		int l = (int) strlen(list[i].path);
@@ -59,15 +59,15 @@ wodan2_proxy_destination_t* destination_longest_match(wodan2_config_t *config,
 	return longest;	
 }
 
-wodan2_default_cachetime_t* default_cachetime_longest_match(wodan2_config_t *config,
+wodan_default_cachetime_t* default_cachetime_longest_match(wodan_config_t *config,
 	char *uri)
 {
-	wodan2_default_cachetime_t *longest, *list;
+	wodan_default_cachetime_t *longest, *list;
 	int length, i;
 
 	longest = NULL;
 	length = 0;
-	list = (wodan2_default_cachetime_t*) config->default_cachetimes->elts;
+	list = (wodan_default_cachetime_t*) config->default_cachetimes->elts;
 	for(i=0; i < config->default_cachetimes->nelts; i++)
 	{
 		int l = (int) strlen(list[i].path);
@@ -81,13 +81,13 @@ wodan2_default_cachetime_t* default_cachetime_longest_match(wodan2_config_t *con
 	return longest;
 } 
 
-wodan2_default_cachetime_regex_t* 
-default_cachetime_regex_match(wodan2_config_t *config, char *uri)
+wodan_default_cachetime_regex_t* 
+default_cachetime_regex_match(wodan_config_t *config, char *uri)
 {
-	wodan2_default_cachetime_regex_t *list;
+	wodan_default_cachetime_regex_t *list;
 	int i;
 	
-	list = (wodan2_default_cachetime_regex_t*) 
+	list = (wodan_default_cachetime_regex_t*) 
 		config->default_cachetimes_regex->elts;
 	for (i = 0; i < config->default_cachetimes_regex->nelts; i++) {
 		if (ap_regexec(list[i].uri_pattern, uri, 0, NULL, 0) == 0)
@@ -96,16 +96,16 @@ default_cachetime_regex_match(wodan2_config_t *config, char *uri)
 	return NULL;
 }
 	
-wodan2_default_cachetime_header_t*
-default_cachetime_header_match(wodan2_config_t *config, apr_table_t *headers)
+wodan_default_cachetime_header_t*
+default_cachetime_header_match(wodan_config_t *config, apr_table_t *headers)
 {
-	wodan2_default_cachetime_header_t *list;
+	wodan_default_cachetime_header_t *list;
 	const char *header;
 	char *header_value;
 	int i;
 
 	
-	list = (wodan2_default_cachetime_header_t*)
+	list = (wodan_default_cachetime_header_t*)
 		config->default_cachetimes_header->elts;
 	for (i = 0; i < config->default_cachetimes_header->nelts; i++) {
 		header = list[i].header;

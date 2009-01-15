@@ -23,7 +23,7 @@ set -e
 enable () {
 	[ -x /usr/sbin/apache$1 ] || return 0
 	[ -f /etc/apache$1/modules.conf ] || return 0
-	if grep -q '^LoadModule.*mod_wodan2\.so' /etc/apache$1/modules.conf 2>&1
+	if grep -q '^LoadModule.*mod_wodan\.so' /etc/apache$1/modules.conf 2>&1
 	then
 		return 0
 	fi

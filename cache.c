@@ -28,7 +28,7 @@
  *     - 0 if not set
  *     - 1 if set
  */
-static int is_cachedir_set(wodan2_config_t *config);
+static int is_cachedir_set(wodan_config_t *config);
 
 /**
  * Return whether the http result code is cacheable
@@ -54,7 +54,7 @@ static int is_response_cacheable (int httpcode, int cache404s);
  * @param cachefilename name of cachefile
  * @param nr which part of the complete directory to return.
  */
-static char *get_cache_file_subdir(wodan2_config_t *config, request_rec *r,
+static char *get_cache_file_subdir(wodan_config_t *config, request_rec *r,
 	char *cachefilename, int nr);
 	
 /**
@@ -65,9 +65,9 @@ static char *get_cache_file_subdir(wodan2_config_t *config, request_rec *r,
  * @retval 0 on error
  * @retval 1 on success 
  */
-static int get_cache_filename(wodan2_config_t *config, request_rec *r, char **filename);
+static int get_cache_filename(wodan_config_t *config, request_rec *r, char **filename);
 	
-WodanCacheStatus_t cache_get_status(wodan2_config_t *config, request_rec *r, 
+WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, 
 	apr_time_t *cache_file_time)
 {
 	char* cachefilename;
@@ -144,7 +144,7 @@ WodanCacheStatus_t cache_get_status(wodan2_config_t *config, request_rec *r,
 	return WODAN_CACHE_NOT_PRESENT;
 }
 
-int cache_read_from_cache (wodan2_config_t *config, request_rec *r,
+int cache_read_from_cache (wodan_config_t *config, request_rec *r,
 	struct httpresponse* httpresponse)
 {
 	char* cachefilename;
@@ -239,14 +239,14 @@ int cache_read_from_cache (wodan2_config_t *config, request_rec *r,
 	return 1;
 }
 
-static int find_cache_time(wodan2_config_t *config,
+static int find_cache_time(wodan_config_t *config,
 			 request_rec *r,
 			 struct httpresponse *httpresponse)
 {
 	int cachetime;
-	wodan2_default_cachetime_header_t *default_cachetime_header_config;
-	wodan2_default_cachetime_regex_t *default_cachetime_regex_config;
-	wodan2_default_cachetime_t *default_cachetime_config;
+	wodan_default_cachetime_header_t *default_cachetime_header_config;
+	wodan_default_cachetime_regex_t *default_cachetime_regex_config;
+	wodan_default_cachetime_t *default_cachetime_config;
 	
 	if (httpresponse != NULL) {
 		default_cachetime_header_config = 
@@ -337,7 +337,7 @@ static apr_time_t parse_xwodan_expire(request_rec *r,
 	return expire_time;
 }
 
-static char *get_expire_time(wodan2_config_t *config,
+static char *get_expire_time(wodan_config_t *config,
 		      request_rec *r, struct httpresponse *httpresponse,
 		      int *cachetime_interval)
 {
@@ -395,7 +395,7 @@ static char *get_expire_time(wodan2_config_t *config,
 	return expire_time_rfc822_string;
 }
 
-static apr_file_t *open_cachefile(wodan2_config_t *config, request_rec *r)
+static apr_file_t *open_cachefile(wodan_config_t *config, request_rec *r)
 {
 	apr_file_t *cachefile = NULL;
 	char *cachefilename;
@@ -462,7 +462,7 @@ static int write_preamble(apr_file_t *cachefile, request_rec *r,
 	return 0;
 }
 
-apr_file_t *cache_get_cachefile(wodan2_config_t *config, request_rec *r, 
+apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r, 
 	struct httpresponse *httpresponse)
 {
 	apr_file_t *cache_file = NULL;
@@ -513,7 +513,7 @@ apr_file_t *cache_get_cachefile(wodan2_config_t *config, request_rec *r,
 	return cache_file;
 }
 
-void cache_close_cachefile(wodan2_config_t *config, request_rec *r,
+void cache_close_cachefile(wodan_config_t *config, request_rec *r,
 	apr_file_t *temp_cachefile)
 {
 	apr_file_t *real_cachefile;
@@ -552,7 +552,7 @@ void cache_close_cachefile(wodan2_config_t *config, request_rec *r,
 	}
 }		
 
-int cache_update_expiry_time(wodan2_config_t *config, request_rec *r) 
+int cache_update_expiry_time(wodan_config_t *config, request_rec *r) 
 {
 	char *cachefilename;
 	int expire_interval;
@@ -614,7 +614,7 @@ char * sha1_to_hex(request_rec *r, const unsigned char *sha1)
 	return apr_pstrdup(r->pool, buffer);
 }
 
-static int get_cache_filename(wodan2_config_t *config, request_rec *r, char **filename )
+static int get_cache_filename(wodan_config_t *config, request_rec *r, char **filename )
 {
 	unsigned char digest[APR_SHA1_DIGESTSIZE];
 	char dir[MAX_CACHEFILE_PATH_LENGTH + 1];
@@ -659,7 +659,7 @@ static int get_cache_filename(wodan2_config_t *config, request_rec *r, char **fi
 	return 1;
 }
 
-static char *get_cache_file_subdir(wodan2_config_t *config, request_rec *r, 
+static char *get_cache_file_subdir(wodan_config_t *config, request_rec *r, 
 				   char *cachefilename, int nr)
 {
 	int count;
@@ -695,7 +695,7 @@ static int is_response_cacheable (int httpcode, int cache404s)
 	else return 0;
 }
 
-static int is_cachedir_set(wodan2_config_t* config)
+static int is_cachedir_set(wodan_config_t* config)
 {
      if (config->is_cachedir_set)
 		return 1;

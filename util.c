@@ -46,13 +46,13 @@ static void wodan_table_add_when_empty(apr_table_t *base, apr_table_t *overlay);
  * @param headers current headers (received from backend)
  * @param r request record (new headers will be placed here)
  */ 
-void apply_proxy_pass_reverse(wodan2_config_t *config, apr_table_t* headers,
+void apply_proxy_pass_reverse(wodan_config_t *config, apr_table_t* headers,
 	request_rec *r);
 
 /** 
  * do reverse mapping of location. 
  */
-const char* wodan_location_reverse_map(wodan2_proxy_alias_t* alias, const char *url,
+const char* wodan_location_reverse_map(wodan_proxy_alias_t* alias, const char *url,
 	request_rec *r);
 /**
  * checks if the user wodan is running as (e.g. 'nobody') is owner of the
@@ -144,7 +144,7 @@ char* util_skipspaces (char* input)
 	return input;
 }
 
-void adjust_headers_for_sending(wodan2_config_t *config, request_rec *r, 
+void adjust_headers_for_sending(wodan_config_t *config, request_rec *r, 
 	httpresponse_t *httpresponse)
 {
 	/* do more adjustments to the headers. This used to be in 
@@ -174,11 +174,11 @@ void wodan_table_add_when_empty(apr_table_t *base, apr_table_t *overlay)
 			apr_table_add(base, elts[i].key, elts[i].val);
 }
 
-void apply_proxy_pass_reverse(wodan2_config_t *config, apr_table_t* headers,
+void apply_proxy_pass_reverse(wodan_config_t *config, apr_table_t* headers,
 	request_rec *r)
 {
 	const char* url;
-	wodan2_proxy_alias_t *alias;
+	wodan_proxy_alias_t *alias;
 
 	alias = alias_longest_match(config, r->uri);
 
@@ -195,7 +195,7 @@ void apply_proxy_pass_reverse(wodan2_config_t *config, apr_table_t* headers,
 			wodan_location_reverse_map(alias, url, r));
 }
 
-const char* wodan_location_reverse_map(wodan2_proxy_alias_t* alias, const char *url,
+const char* wodan_location_reverse_map(wodan_proxy_alias_t* alias, const char *url,
 	request_rec *r)
 {
 	int url_len;

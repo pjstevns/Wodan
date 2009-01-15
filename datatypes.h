@@ -48,7 +48,7 @@
 /**
  * Structure that contains the config elements of wodan
  */
-typedef struct wodan2_config {
+typedef struct wodan_config {
 	unsigned is_cachedir_set; /* 1 if the cache dir is set */
 	char cachedir[MAX_CACHE_PATH_SIZE + 1];/* The dir where cache files 
 					    should be stored */
@@ -67,48 +67,48 @@ typedef struct wodan2_config {
 	apr_array_header_t *default_cachetimes_regex;
 	apr_array_header_t *default_cachetimes_header;
 	int cachedir_levels;
-} wodan2_config_t;
+} wodan_config_t;
 
 /**
  * Structure containing info about a ReverseProxyPass directive
  */
-typedef struct wodan2_proxy_destination {
+typedef struct wodan_proxy_destination {
 	const char *path;
 	const char *url;
-} wodan2_proxy_destination_t;
+} wodan_proxy_destination_t;
 
 /**
  * Structure containing info about a ReverseProxyPassReverse directive
  */
-typedef struct wodan2_proxy_alias {
+typedef struct wodan_proxy_alias {
 	const char *path;
 	const char *alias;
-} wodan2_proxy_alias_t;
+} wodan_proxy_alias_t;
 
 /**
  * Structure containing info about a DefaultCacheTime directive
  */
-typedef struct wodan2_default_cachetime {
+typedef struct wodan_default_cachetime {
 	const char *path;	
 	apr_int32_t cachetime;
-} wodan2_default_cachetime_t;
+} wodan_default_cachetime_t;
 
 /**
  * Structure containing info for the DefaultCacheTimeRegex directive
  */
-typedef struct wodan2_default_cachetime_regex {
+typedef struct wodan_default_cachetime_regex {
 	ap_regex_t *uri_pattern;
 	apr_int32_t cachetime;
-} wodan2_default_cachetime_regex_t;
+} wodan_default_cachetime_regex_t;
 
 /**
  * Structure containing info for the DefaultCacheTimeHeader directive
  */
-typedef struct wodan2_default_cachetime_header {
+typedef struct wodan_default_cachetime_header {
 	const char *header;
 	ap_regex_t *header_value_pattern;
 	apr_int32_t cachetime;
-} wodan2_default_cachetime_header_t;
+} wodan_default_cachetime_header_t;
 
 /**
  * Structure representing an httpresponse

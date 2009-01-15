@@ -39,7 +39,7 @@ typedef enum {
  *      - WODAN_CACHE_NOT_CACHEABLE for requests that cannot be cached
  *      - WODAN_CACHE_404 for requests that are cached as a 404 (not found)
  */
-WodanCacheStatus_t cache_get_status(wodan2_config_t *config, request_rec *r, 
+WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, 
 	apr_time_t *cache_file_time);
 
 /**
@@ -49,7 +49,7 @@ WodanCacheStatus_t cache_get_status(wodan2_config_t *config, request_rec *r,
  * @param httpresponse The httpresponse record the data should be set in
  * @return 1 of request can be handled from cache 0 otherwise
  */
-int cache_read_from_cache (wodan2_config_t *config, request_rec *r, 
+int cache_read_from_cache (wodan_config_t *config, request_rec *r, 
 	struct httpresponse* httpresponse);
 
 /**
@@ -60,7 +60,7 @@ int cache_read_from_cache (wodan2_config_t *config, request_rec *r,
  * @retval NULL if not being cached
  * @retval apr_file_t pointer otherwise.
  */
-apr_file_t *cache_get_cachefile(wodan2_config_t *config, request_rec *r,
+apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
 	struct httpresponse *httpresponse);
 
 /**
@@ -69,7 +69,7 @@ apr_file_t *cache_get_cachefile(wodan2_config_t *config, request_rec *r,
  * @param config the wodan configuration
  * @param cachefile the cache file, may be NULL
  */
-void cache_close_cachefile(wodan2_config_t *config, request_rec *r, 
+void cache_close_cachefile(wodan_config_t *config, request_rec *r, 
 	apr_file_t *cachefile);
 
 /**
@@ -77,5 +77,5 @@ void cache_close_cachefile(wodan2_config_t *config, request_rec *r,
  * @param r request_rec
  * @param config the wodan configuration
  */
-int cache_update_expiry_time(wodan2_config_t *config, request_rec *r);
+int cache_update_expiry_time(wodan_config_t *config, request_rec *r);
 #endif

@@ -5,9 +5,9 @@
 ## DP: No description.
 
 @DPATCH@
-diff -urNad wodan2~/Makefile.in wodan2/Makefile.in
---- wodan2~/Makefile.in	2008-06-23 10:31:56.000000000 +0200
-+++ wodan2/Makefile.in	2008-06-23 10:32:42.000000000 +0200
+diff -urNad wodan~/Makefile.in wodan/Makefile.in
+--- wodan~/Makefile.in	2008-06-23 10:31:56.000000000 +0200
++++ wodan/Makefile.in	2008-06-23 10:32:42.000000000 +0200
 @@ -7,10 +7,9 @@
  builddir=.
  top_srcdir=$(apache_dir)
@@ -19,7 +19,7 @@ diff -urNad wodan2~/Makefile.in wodan2/Makefile.in
 +APXS=@APXS@
  APACHECTL=$(apache_dir)/bin/apachectl
  
- SOURCE_FILES=mod_wodan2.c cache.c httpclient.c networkconnector.c match.c util.c 
+ SOURCE_FILES=mod_wodan.c cache.c httpclient.c networkconnector.c match.c util.c 
 @@ -21,7 +20,6 @@
  #DEFS=-Dmy_define=my_value
  DEFS=-W -Wall -Wpointer-arith -Wstrict-prototypes
@@ -34,7 +34,7 @@ diff -urNad wodan2~/Makefile.in wodan2/Makefile.in
  
 -#   simple test
 -test: reload
--	lynx -mime_header http://localhost/wodan2
+-	lynx -mime_header http://localhost/wodan
 -
 -#   install and activate shared object by reloading Apache to
 -#   force a reload of the shared object file
@@ -52,9 +52,9 @@ diff -urNad wodan2~/Makefile.in wodan2/Makefile.in
  # only for development:
  -include $(OBJECT_FILES:.o=.d)
  
-diff -urNad wodan2~/configure.in wodan2/configure.in
---- wodan2~/configure.in	2008-06-23 10:31:56.000000000 +0200
-+++ wodan2/configure.in	2008-06-23 10:32:42.000000000 +0200
+diff -urNad wodan~/configure.in wodan/configure.in
+--- wodan~/configure.in	2008-06-23 10:31:56.000000000 +0200
++++ wodan/configure.in	2008-06-23 10:32:42.000000000 +0200
 @@ -17,7 +17,7 @@
  # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  

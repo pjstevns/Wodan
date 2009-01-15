@@ -56,7 +56,7 @@ char* util_skipspaces (char* input);
  * @param r request_rec
  * @param httpresponse response from backend.
  */
-void adjust_headers_for_sending(wodan2_config_t *config, request_rec *r, 
+void adjust_headers_for_sending(wodan_config_t *config, request_rec *r, 
 	httpresponse_t *httpresponse);
 
 /**
