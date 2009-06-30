@@ -610,12 +610,18 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 	char dir[MAX_CACHEFILE_PATH_LENGTH + 1];
 	char *checksum;
 	char *ptr;
+	const char *accept_language;
 	int i;
 	struct apr_sha1_ctx_t sha;
+
+	accept_language = apr_table_get(r->headers_in, "Accept-Language");
 
 	apr_sha1_init(&sha);
 	apr_sha1_update(&sha, r->hostname, strlen(r->hostname));
 	apr_sha1_update(&sha, r->unparsed_uri, strlen(r->unparsed_uri));
+	if (accept_language)
+		apr_sha1_update(&sha, accept_language, strlen(accept_language));
+
 	apr_sha1_final(digest, &sha);
 
 	checksum = sha1_to_hex(r, digest);
