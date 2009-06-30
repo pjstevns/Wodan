@@ -1,0 +1,7 @@
+cscope.out
+*~
+*.swp
+*.o
+*.lo
+*.so
+*.slo
