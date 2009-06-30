@@ -17,7 +17,7 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 AC_PREREQ(2.57)
-AC_INIT()
+AC_INIT([wodan], [2.2.0], [wodan@ic-s.nl])
 # Checks for programs.
 AC_PROG_CC
 
@@ -28,33 +28,97 @@ AC_PROG_CC
 # Checks for typedefs, structures, and compiler characteristics.
 
 # Checks for library functions.
+AC_DEFUN([APACHE_DIR],[
 
-# Some functions we created specifically for Wodan (taken from Wodan for Apache 1.3)
-AC_DEFUN([CHECK_APACHE_DIR],[
+  AC_MSG_CHECKING(for static Apache support)
   AC_ARG_WITH(
     apache,
     [  --with-apache[=DIR]       Apache server directory],
     ,
-    [with_apache="no"]
-  )
-
-  AC_MSG_CHECKING(for Apache directory)
-
-  if test "$with_apache" = "no"; then
-    AC_MSG_ERROR( Specify the apache using --with-apache)
-  else
+    [
     # make sure that a well known include file exists
     if test -e $with_apache/include/httpd.h; then
       apache_dir=$with_apache
-      AC_MSG_RESULT(APACHE found!)
+      BINNAME=mod_wodan.a
+      AC_MSG_RESULT(yes - found!)
     else
-      AC_MSG_ERROR( $with_apache not found. )
+      FAIL_STATIC=1
+      AC_MSG_RESULT(no - $with_apache not found. )
     fi
-  fi
+  ],[
+      AC_MSG_RESULT(no)
+  ])
 ])
 
+AC_DEFUN([APACHE_APXS],[
+	AC_MSG_CHECKING([for dynamic Apache module support (via APXS)])
+	AC_ARG_WITH(apxs,
+[  --with-apxs[=FILE]      Build shared Apache module.  FILE is the optional
+                          pathname to the Apache apxs tool; defaults to "apxs2".],
+[
+	if test "$apache_dir" != ""; then
+		AC_MSG_ERROR(--with-apache and --with-apxs are mutually exclusive)
+	fi
+
+	if test "$withval" = "yes"; then
+		APXS=apxs2
+	else
+		APXS="$withval"
+	fi
+])
+
+if test "$BINNAME" = "" -a "$APXS" = "" -a "$FAIL_STATIC" = ""; then
+	for i in /usr/sbin /usr/bin /usr/local/apache/bin ; do
+		if test -f "$i/apxs2"; then
+			APXS="$i/apxs2"
+		fi
+	done
+fi
+
+if test -n "$APXS"; then
+	BINNAME=mod_wodan.so
+
+	APXS_CC="`$APXS -q CC`"
+	APXS_INCLUDE="`$APXS -q INCLUDEDIR`"
+	APXS_LIBEXEC="`$APXS -q LIBEXECDIR`"
+
+	INCLUDE="$INCLUDE -I$APXS_INCLUDE"
+
+	INSTALL_IT="mkdir -p $APXS_LIBEXEC && \$(APXS) -i -a -n wodan $BINNAME"
+
+	AC_SUBST(APXS)
+	AC_SUBST(BINNAME)
+	AC_SUBST(INSTALL_IT)
+
+	AC_MSG_RESULT(found at $APXS)
+else
+	AC_MSG_RESULT(no)
+fi
+
+if test -n "$APXS"; then
+	if test -z "`$APXS -q INCLUDEDIR`" || test "$APXS_LIBEXEC" = "modules"; then
+	AC_MSG_ERROR(
+			[Your APXS installation is broken and cannot be used.])
+
+	fi
+fi
+
+# If we did not find a way to build/install mod_wodan, then bail out.
+if test "$BINNAME" = ""; then
+	if test "$FAIL_STATIC" = ""; then
+		AC_MSG_ERROR(You must specify either --with-apxs or --with-apache)
+	else
+		AC_MSG_ERROR(You need to point --with-apache at the base Apache source code directory)
+	fi
+fi
+
+])
+
+
+
 # call custom functions
-CHECK_APACHE_DIR
+APACHE_DIR
+APACHE_APXS
 
 AC_SUBST(apache_dir)
 
