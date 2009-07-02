@@ -502,6 +502,7 @@ static int wodan_handler(request_rec *r)
 		ap_get_module_config(r->server->module_config, &wodan_module);
 	
 	// TODO: check if is is perhaps a better idea to create a table of a certain size
+	memset(&httpresponse, 0, sizeof(httpresponse_t));
 	httpresponse.headers = apr_table_make(r->pool, 0);
 	
 	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
@@ -509,6 +510,9 @@ static int wodan_handler(request_rec *r)
 
 	// see if the request can be handled from the cache.
 	cache_status = cache_get_status(config, r, &cache_file_time);
+
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
+		     "Cache status: %d", cache_status);
 
 	if (config->cache_404s) {
 		if (cache_status == WODAN_CACHE_404) {
