@@ -66,6 +66,9 @@ typedef struct wodan_config {
 	apr_array_header_t *default_cachetimes;
 	apr_array_header_t *default_cachetimes_regex;
 	apr_array_header_t *default_cachetimes_header;
+	apr_array_header_t *hash_headers;
+	apr_array_header_t *hash_headers_match;
+	
 	int cachedir_levels;
 } wodan_config_t;
 
@@ -109,6 +112,16 @@ typedef struct wodan_default_cachetime_header {
 	ap_regex_t *header_value_pattern;
 	apr_int32_t cachetime;
 } wodan_default_cachetime_header_t;
+
+/**
+ * Structure containing info for the WodanHashHeaderMatch directive
+ */
+typedef struct wodan_hash_header_match {
+	const char *header;
+	ap_regex_t *regex;
+} wodan_hash_header_match_t;
+
+
 
 /**
  * Structure representing an httpresponse

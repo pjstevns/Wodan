@@ -58,6 +58,12 @@ static const char *add_default_cachetime(cmd_parms *cmd, void *dummy,
 /* add a default cachetime for a path matching a regular expression */
 static const char* add_default_cachetime_regex(cmd_parms *cmd, 
 	void *dummy, const char *regex_pattern, const char *time_string);
+/* add a header to the hash */
+static const char* add_hash_header(cmd_parms *cmd, 
+	void *dummy, const char *header);
+/* add a header to the hash if the value matches the regex pattern */
+static const char* add_hash_header_match(cmd_parms *cmd, 
+	void *dummy, const char *header, const char *regex_pattern);
 /* add a default cachetime for a header whose value matches a regular expression */
 static const char* add_default_cachetime_header(cmd_parms *cmd, void *dummy, 
 	const char *http_header, const char *regex_pattern, const char *time_string);
@@ -94,6 +100,12 @@ static const command_rec wodan_commands[] =
 	AP_INIT_TAKE3("WodanDefaultCacheTimeHeaderMatch", 
 		add_default_cachetime_header, NULL, RSRC_CONF, 
 		"A header, a regex pattern and a time string"),
+	AP_INIT_TAKE1("WodanHashHeader",
+		add_hash_header, NULL, RSRC_CONF,
+		"A header to add to the hash"),
+	AP_INIT_TAKE2("WodanHashHeaderMatch",
+		add_hash_header_match, NULL, RSRC_CONF,
+		"A header to add to the hash if the regex pattern matches"),
 	AP_INIT_FLAG("WodanRunOnCache", add_run_on_cache, NULL, RSRC_CONF,
 		"run completely on cache"),
 	AP_INIT_FLAG("WodanCache404s", add_cache_404s, NULL, RSRC_CONF,
@@ -144,6 +156,10 @@ static void *wodan_create_config(apr_pool_t *p)
 		sizeof(wodan_default_cachetime_regex_t));
 	config->default_cachetimes_header = apr_array_make(p, 0,
 		sizeof(wodan_default_cachetime_header_t));	
+	config->hash_headers = apr_array_make(p, 0, 
+		sizeof(const char *));
+	config->hash_headers_match = apr_array_make(p, 0, 
+		sizeof(wodan_hash_header_match_t));
 	return config;		
 }
 
@@ -359,6 +375,34 @@ static const char* add_default_cachetime_regex(cmd_parms *cmd,
 		new_default_cachetime_regex->cachetime = 
 			util_timestring_to_seconds(apr_pstrdup(cmd->pool, time_string));
 
+	return NULL;
+}
+
+static const char* add_hash_header(cmd_parms *cmd, 
+	void *dummy WODAN_UNUSED_PARAMETER, const char *headername)
+{
+	server_rec *s = cmd->server;
+	wodan_config_t *config = (wodan_config_t *) ap_get_module_config(s->module_config, &wodan_module);
+
+	*(const char **)apr_array_push(config->hash_headers) = headername;
+
+	return NULL;
+}
+
+static const char* add_hash_header_match(cmd_parms *cmd, 
+	void *dummy WODAN_UNUSED_PARAMETER, const char *headername, const char *regex_pattern)
+{
+	server_rec *s = cmd->server;
+	wodan_config_t *config = (wodan_config_t *) ap_get_module_config(s->module_config, &wodan_module);
+	ap_regex_t *compiled_pattern = NULL;
+
+	compiled_pattern = ap_pregcomp(cmd->pool, regex_pattern, AP_REG_EXTENDED | AP_REG_NOSUB);
+	if (compiled_pattern == NULL) {
+		char *error_message = apr_psprintf(cmd->pool, 
+			"Failure compiling regex pattern \"%s\"", regex_pattern);
+		return error_message;
+	}	
+	
 	return NULL;
 }
 
