@@ -170,6 +170,25 @@ sections:
 	WodanDefaultCacheTime /var/www 2m
 	WodanDefaultCacheTimeHeaderMatch Content-Type ^image/.*$ 30m 
     
+
+	-----------------------------
+	WodanHashHeader <http-header> 
+	-----------------------------
+
+	Specifies additional request headers to use in constructing the hash for 
+	a request. 
+
+	The following directives will add support for multi-lingual sites.
+
+	WodanHashHeader Cookie
+	WodanHashHeader Accept-Language
+
+	-------------------------------------------------
+	WodanHashHeaderMatch <http-header> <regexpattern>
+	-------------------------------------------------
+
+	TODO
+
 	--------------	
 	WodanCacheDir <dir>
 	--------------

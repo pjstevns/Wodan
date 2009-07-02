@@ -615,35 +615,25 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 
 	apr_array_header_t *headers = config->hash_headers;
 
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-			"check [%p]", (void *)headers);
-
 	apr_sha1_init(&sha);
 	apr_sha1_update(&sha, r->hostname, strlen(r->hostname));
 	apr_sha1_update(&sha, r->unparsed_uri, strlen(r->unparsed_uri));
 
         if (headers) {
-                int i;
+                int i = 0;
 
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-				"loop: %d",  i);
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "loop: %d",  i);
 
-                for(i = 0; i < headers->nelts; i++)
-                {
-
-
+                for(i = 0; i < headers->nelts; i++) {
 			const char *key = ((const char **)headers->elts)[i];
 			const char *value = apr_table_get(r->headers_in, (const char *)key);
 
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0,
-					r->server, "Lookup request-header for hash [%s]", key);
+			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Lookup request-header for hash [%s]", key);
 
 			if (value) {
-				ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0,
-						r->server, "Found header for hash [%s: %s]", key, value);
+				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Found header for hash [%s: %s]", key, value);
 				apr_sha1_update(&sha, value, strlen(value));
 			}
-
                 }
         }
 

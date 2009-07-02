@@ -215,7 +215,13 @@ static void *wodan_merge_config(apr_pool_t *p, void *base_config_p,
 	config->default_cachetimes_header = apr_array_append(p,
 		base_config->default_cachetimes_header, 
 		new_config->default_cachetimes_header);
-		
+	config->hash_headers = apr_array_append(p,
+		base_config->hash_headers, 
+		new_config->hash_headers);
+	config->hash_headers_match = apr_array_append(p,
+		base_config->hash_headers_match, 
+		new_config->hash_headers_match);
+
 	return config;
 }               
 /* The sample content handler */
