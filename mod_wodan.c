@@ -63,7 +63,7 @@ static const char* add_hash_header(cmd_parms *cmd,
 	void *dummy, const char *header);
 /* add a header to the hash if the value matches the regex pattern */
 static const char* add_hash_header_match(cmd_parms *cmd, 
-	void *dummy, const char *header, const char *regex_pattern);
+	void *dummy, const char *header, const char *regex_pattern, const char *replacement);
 /* add a default cachetime for a header whose value matches a regular expression */
 static const char* add_default_cachetime_header(cmd_parms *cmd, void *dummy, 
 	const char *http_header, const char *regex_pattern, const char *time_string);
@@ -103,9 +103,9 @@ static const command_rec wodan_commands[] =
 	AP_INIT_TAKE1("WodanHashHeader",
 		add_hash_header, NULL, RSRC_CONF,
 		"A header to add to the hash"),
-	AP_INIT_TAKE2("WodanHashHeaderMatch",
+	AP_INIT_TAKE23("WodanHashHeaderMatch",
 		add_hash_header_match, NULL, RSRC_CONF,
-		"A header to add to the hash if the regex pattern matches"),
+		"A header to add to the hash if the regex pattern matches and an optional replacement pattern"),
 	AP_INIT_FLAG("WodanRunOnCache", add_run_on_cache, NULL, RSRC_CONF,
 		"run completely on cache"),
 	AP_INIT_FLAG("WodanCache404s", add_cache_404s, NULL, RSRC_CONF,
@@ -128,9 +128,9 @@ module AP_MODULE_DECLARE_DATA wodan_module = {
 
 /* initialize Wodan */
 static int wodan_init_handler(apr_pool_t *p, 
-	apr_pool_t *plog WODAN_UNUSED_PARAMETER, 
-	apr_pool_t *ptemp WODAN_UNUSED_PARAMETER,
-	server_rec *s WODAN_UNUSED_PARAMETER)
+	apr_pool_t *plog UNUSED, 
+	apr_pool_t *ptemp UNUSED,
+	server_rec *s UNUSED)
 {
 	const char *identifier_string;
 	
@@ -142,35 +142,27 @@ static int wodan_init_handler(apr_pool_t *p,
 
 static void *wodan_create_config(apr_pool_t *p)
 {
-	wodan_config_t* config = (wodan_config_t *) 
-		apr_pcalloc(p, sizeof(wodan_config_t));
+	wodan_config_t* config = (wodan_config_t *) apr_pcalloc(p, sizeof(wodan_config_t));
 	
-	config->cachedir_levels = DEFAULT_CACHEDIR_LEVELS;
-	config->proxy_passes = apr_array_make(p, 0, 
-		sizeof(wodan_proxy_destination_t));
-	config->proxy_passes_reverse = apr_array_make(p, 0,
-		sizeof(wodan_proxy_alias_t));
-	config->default_cachetimes = apr_array_make(p, 0,
-		sizeof(wodan_default_cachetime_t));
-	config->default_cachetimes_regex = apr_array_make(p, 0,
-		sizeof(wodan_default_cachetime_regex_t));
-	config->default_cachetimes_header = apr_array_make(p, 0,
-		sizeof(wodan_default_cachetime_header_t));	
-	config->hash_headers = apr_array_make(p, 0, 
-		sizeof(const char *));
-	config->hash_headers_match = apr_array_make(p, 0, 
-		sizeof(wodan_hash_header_match_t));
+	config->cachedir_levels           = DEFAULT_CACHEDIR_LEVELS;
+	config->proxy_passes              = apr_array_make(p, 0, sizeof(wodan_proxy_destination_t));
+	config->proxy_passes_reverse      = apr_array_make(p, 0, sizeof(wodan_proxy_alias_t));
+	config->default_cachetimes        = apr_array_make(p, 0, sizeof(wodan_default_cachetime_t));
+	config->default_cachetimes_regex  = apr_array_make(p, 0, sizeof(wodan_default_cachetime_regex_t));
+	config->default_cachetimes_header = apr_array_make(p, 0, sizeof(wodan_default_cachetime_header_t));	
+	config->hash_headers              = apr_array_make(p, 0, sizeof(const char *));
+	config->hash_headers_match        = apr_array_make(p, 0, sizeof(wodan_hash_header_match_t));
 	return config;		
 }
 
 static void *wodan_create_server_config(apr_pool_t *p, 
-	server_rec *s WODAN_UNUSED_PARAMETER)
+	server_rec *s UNUSED)
 {
 	return wodan_create_config(p);
 }
 
 static void *wodan_create_dir_config(apr_pool_t *p, 
-	char *dir WODAN_UNUSED_PARAMETER)
+	char *dir UNUSED)
 {
 	return wodan_create_config(p);
 }
@@ -226,7 +218,7 @@ static void *wodan_merge_config(apr_pool_t *p, void *base_config_p,
 }               
 /* The sample content handler */
 
-static const char *add_pass(cmd_parms *cmd, void *dummy WODAN_UNUSED_PARAMETER, 
+static const char *add_pass(cmd_parms *cmd, void *dummy UNUSED, 
 	const char *path, const char *url)
 {
 	server_rec *s = cmd->server;
@@ -253,7 +245,7 @@ static const char *add_pass(cmd_parms *cmd, void *dummy WODAN_UNUSED_PARAMETER,
 }
 
 static const char *add_pass_reverse(cmd_parms *cmd,
-	void *dummy WODAN_UNUSED_PARAMETER, const char *path, const char *url)
+	void *dummy UNUSED, const char *path, const char *url)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *)
@@ -272,7 +264,7 @@ static const char *add_pass_reverse(cmd_parms *cmd,
 	return NULL;
 }
 
-static const char *add_cachedir(cmd_parms *cmd, void *dummy WODAN_UNUSED_PARAMETER, 
+static const char *add_cachedir(cmd_parms *cmd, void *dummy UNUSED, 
 	const char *path)
 {
 	server_rec *s = cmd->server;
@@ -304,7 +296,7 @@ static const char *add_cachedir(cmd_parms *cmd, void *dummy WODAN_UNUSED_PARAMET
 }	
 
 static const char *add_cachedir_levels(cmd_parms *cmd, 
-	void *dummy WODAN_UNUSED_PARAMETER, const char *level)
+	void *dummy UNUSED, const char *level)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *)
@@ -331,7 +323,7 @@ static const char *add_cachedir_levels(cmd_parms *cmd,
 }	
 
 static const char *add_default_cachetime(cmd_parms *cmd, 
-	void *dummy WODAN_UNUSED_PARAMETER, const char *path, const char *time_string)
+	void *dummy UNUSED, const char *path, const char *time_string)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *)
@@ -354,7 +346,7 @@ static const char *add_default_cachetime(cmd_parms *cmd,
 }
 
 static const char* add_default_cachetime_regex(cmd_parms *cmd, 
-	void *dummy WODAN_UNUSED_PARAMETER, const char *regex_pattern, 
+	void *dummy UNUSED, const char *regex_pattern, 
 	const char *time_string)
 {
 	server_rec *s = cmd->server;
@@ -385,7 +377,7 @@ static const char* add_default_cachetime_regex(cmd_parms *cmd,
 }
 
 static const char* add_hash_header(cmd_parms *cmd, 
-	void *dummy WODAN_UNUSED_PARAMETER, const char *headername)
+	void *dummy UNUSED, const char *headername)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *) ap_get_module_config(s->module_config, &wodan_module);
@@ -396,13 +388,13 @@ static const char* add_hash_header(cmd_parms *cmd,
 }
 
 static const char* add_hash_header_match(cmd_parms *cmd, 
-	void *dummy WODAN_UNUSED_PARAMETER, const char *headername, const char *regex_pattern)
+	void *dummy UNUSED, const char *headername, const char *regex_pattern, const char *replacement)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *) ap_get_module_config(s->module_config, &wodan_module);
 	ap_regex_t *compiled_pattern = NULL;
 
-	compiled_pattern = ap_pregcomp(cmd->pool, regex_pattern, AP_REG_EXTENDED | AP_REG_NOSUB);
+	compiled_pattern = ap_pregcomp(cmd->pool, regex_pattern, AP_REG_EXTENDED);
 	if (compiled_pattern == NULL) {
 		char *error_message = apr_psprintf(cmd->pool, 
 			"Failure compiling regex pattern \"%s\"", regex_pattern);
@@ -413,7 +405,7 @@ static const char* add_hash_header_match(cmd_parms *cmd,
 }
 
 static const char* add_default_cachetime_header(cmd_parms *cmd, 
-	void *dummy WODAN_UNUSED_PARAMETER, const char *http_header, 
+	void *dummy UNUSED, const char *http_header, 
 	const char *regex_pattern, const char *time_string)
 {
 	server_rec *s = cmd->server;
@@ -444,7 +436,7 @@ static const char* add_default_cachetime_header(cmd_parms *cmd,
 }
 
 static const char* add_run_on_cache(cmd_parms *cmd, 
-	void *dummy WODAN_UNUSED_PARAMETER, int flag)
+	void *dummy UNUSED, int flag)
 {
 	wodan_config_t *config = (wodan_config_t *)
 		ap_get_module_config(cmd->server->module_config, &wodan_module);
@@ -455,7 +447,7 @@ static const char* add_run_on_cache(cmd_parms *cmd,
 }
 
 static const char *add_cache_404s(cmd_parms *cmd, 
-	void *dummy WODAN_UNUSED_PARAMETER, int flag)
+	void *dummy UNUSED, int flag)
 {
 	wodan_config_t *config = (wodan_config_t *)
 		ap_get_module_config(cmd->server->module_config, &wodan_module);
@@ -466,7 +458,7 @@ static const char *add_cache_404s(cmd_parms *cmd,
 }
 
 static const char *add_backend_timeout(cmd_parms *cmd,
-	void *dummy WODAN_UNUSED_PARAMETER, const char *timeout_string)
+	void *dummy UNUSED, const char *timeout_string)
 {
 	wodan_config_t *config = (wodan_config_t *)
 		ap_get_module_config(cmd->server->module_config, &wodan_module);
@@ -490,7 +482,7 @@ static const char *add_backend_timeout(cmd_parms *cmd,
 	return NULL;
 }
 
-static void wodan_register_hooks(apr_pool_t *p WODAN_UNUSED_PARAMETER)
+static void wodan_register_hooks(apr_pool_t *p UNUSED)
 {
 	ap_hook_post_config(wodan_init_handler, NULL, NULL, APR_HOOK_MIDDLE);
 	ap_hook_handler(wodan_handler, NULL, NULL, APR_HOOK_MIDDLE);

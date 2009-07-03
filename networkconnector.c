@@ -12,7 +12,7 @@
 #include <errno.h>
 
 network_connection_t* networkconnect (wodan_config_t *config, char* host, int port, 
-		request_rec *r, int do_ssl WODAN_UNUSED_PARAMETER)
+		request_rec *r, int do_ssl UNUSED)
 {
 	network_connection_t* network_connection;
 	apr_socket_t *socket;
@@ -57,7 +57,7 @@ network_connection_t* networkconnect (wodan_config_t *config, char* host, int po
 }
 
 int connection_close_connection(network_connection_t *connection,
-	const request_rec *r WODAN_UNUSED_PARAMETER)
+	const request_rec *r UNUSED)
 {
 	/* no need to do anything. This is done by apache internal 
 	   functions */
@@ -156,8 +156,8 @@ char *connection_read_string(network_connection_t *connection,
 }
 
 int connection_flush_write_stream(
-	network_connection_t *connection WODAN_UNUSED_PARAMETER,
-	const request_rec *r WODAN_UNUSED_PARAMETER)
+	network_connection_t *connection UNUSED,
+	const request_rec *r UNUSED)
 {			  
      /* noop */
      return 1;

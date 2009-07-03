@@ -18,9 +18,9 @@
 #define DEFAULT_CACHETIME 3600
 
 #ifdef __GNUC__
-#define WODAN_UNUSED_PARAMETER __attribute__((__unused__))
+#define UNUSED __attribute__((__unused__))
 #else
-#define WODAN_UNUSED_PARAMETER
+#define UNUSED
 #endif
 
 #include "httpd.h"
@@ -119,6 +119,7 @@ typedef struct wodan_default_cachetime_header {
 typedef struct wodan_hash_header_match {
 	const char *header;
 	ap_regex_t *regex;
+	const char *pattern;
 } wodan_hash_header_match_t;
 
 
