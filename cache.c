@@ -28,8 +28,12 @@
  *     - 0 if not set
  *     - 1 if set
  */
-static int is_cachedir_set(wodan_config_t *config);
-
+static int is_cachedir_set(wodan_config_t* config)
+{
+	if (config->is_cachedir_set)
+		return 1;
+	return 0;
+}
 /**
  * Return whether the http result code is cacheable
  * @param httpcode The http code to check
@@ -37,7 +41,16 @@ static int is_cachedir_set(wodan_config_t *config);
  * @retval 1 if return code is cachable
  * @retval 0 if return code is not cachable
  */
-static int is_response_cacheable (int httpcode, int cache404s);
+static int is_response_cacheable (int httpcode, int cache404s)
+{
+	if ( cache404s && (httpcode == 404))
+		return 1;
+
+	if ( (httpcode >= 200) && (httpcode < 400) )
+		return 1;
+
+	return 0;
+}
 
 /**
  * return the name of the (nested) subdirectory used for
@@ -54,9 +67,31 @@ static int is_response_cacheable (int httpcode, int cache404s);
  * @param cachefilename name of cachefile
  * @param nr which part of the complete directory to return.
  */
-static char *get_cache_file_subdir(wodan_config_t *config, request_rec *r,
-	char *cachefilename, int nr);
-	
+static char *get_cache_file_subdir(wodan_config_t *config, request_rec *r, 
+				   char *cachefilename, int nr)
+{
+	int count;
+	char *ptr;
+	char *buffer;
+
+	buffer = apr_pstrdup(r->pool, cachefilename);
+
+	/* We count back (from the end of the path) just enough parts 
+	   to get the desired subdir */
+	count = config->cachedir_levels - nr;
+	ptr = buffer + (int) strlen(buffer);
+
+	while ( ( count > 0 ) && ( ptr > buffer ) ) {
+		if ( *ptr == '/' ) {
+			*ptr = '\0';
+			count--;
+		}
+		ptr--;
+	}
+
+	return buffer;
+}
+
 /**
  * return the name of the cachefile
  * @param config the wodan configuration
@@ -65,8 +100,87 @@ static char *get_cache_file_subdir(wodan_config_t *config, request_rec *r,
  * @retval 0 on error
  * @retval 1 on success 
  */
-static int get_cache_filename(wodan_config_t *config, request_rec *r, char **filename);
+static char * sha1_to_hex(request_rec *r, const unsigned char *sha1)
+{
+	static const char hex[] = "0123456789abcdef";
+	char buffer[50], *buf = buffer;
+	int i;
+
+	for (i = 0; i < 20; i++) {
+		unsigned int val = *sha1++;
+		*buf++ = hex[val >> 4];
+		*buf++ = hex[val & 0xf];
+	}
+	*buf = '\0';
+
+	return apr_pstrdup(r->pool, buffer);
+}
+
+static int get_cache_filename(wodan_config_t *config, request_rec *r, char **filename )
+{
+	unsigned char digest[APR_SHA1_DIGESTSIZE];
+	char dir[MAX_CACHEFILE_PATH_LENGTH + 1];
+	char *checksum;
+	char *ptr;
+	int i;
+	struct apr_sha1_ctx_t sha;
+
+	apr_array_header_t *headers = config->hash_headers;
+
+	apr_sha1_init(&sha);
+	apr_sha1_update(&sha, r->hostname, strlen(r->hostname));
+	apr_sha1_update(&sha, r->unparsed_uri, strlen(r->unparsed_uri));
+
+        if (headers) {
+                int i = 0;
+
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "loop: %d",  i);
+
+                for(i = 0; i < headers->nelts; i++) {
+			const char *key = ((const char **)headers->elts)[i];
+			const char *value = apr_table_get(r->headers_in, (const char *)key);
+
+			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Lookup request-header for hash [%s]", key);
+
+			if (value) {
+				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Found header for hash [%s: %s]", key, value);
+				apr_sha1_update(&sha, value, strlen(value));
+			}
+                }
+        }
+
+
+	apr_sha1_final(digest, &sha);
+
+	checksum = sha1_to_hex(r, digest);
+
+	/* If cachedir + subdirs + checksum don't fit in buffer, 
+	 * we have a problem */
+	if (strlen(config->cachedir) > 
+	     (MAX_CACHEFILE_PATH_LENGTH - 32 - (2 * MAX_CACHEDIR_LEVELS))) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, 
+			     "Cachefile pathname doesn't fit into buffer.");
+		*filename = NULL;
+		return 0;
+	}
+
+	apr_cpystrn(dir, config->cachedir, MAX_CACHEFILE_PATH_LENGTH + 1);
+	ptr = &dir[0] + (int) strlen(dir);
 	
+	if (*ptr == '/')
+		ptr--;
+
+	for (i = 0; i < config->cachedir_levels; i++) {
+		ptr[0] = '/';
+		ptr[1] = checksum[i];
+		ptr += 2;
+	}
+	*ptr = '\0';
+
+	*filename = ap_make_full_path(r->pool, dir, checksum);
+	return 1;
+}
+
 WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, 
 		apr_time_t *cache_file_time)
 {
@@ -234,54 +348,6 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r,
 	return 1;
 }
 
-static int find_cache_time(wodan_config_t *config,
-			 request_rec *r,
-			 struct httpresponse *httpresponse)
-{
-	int cachetime;
-	wodan_default_cachetime_header_t *default_cachetime_header_config;
-	wodan_default_cachetime_regex_t *default_cachetime_regex_config;
-	wodan_default_cachetime_t *default_cachetime_config;
-	
-	if (httpresponse != NULL) {
-		default_cachetime_header_config = 
-			default_cachetime_header_match(config, httpresponse->headers);
-		if (default_cachetime_header_config != NULL) {
-			cachetime = default_cachetime_header_config->cachetime;
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-			       r->server,
-			       "Got cachetime from header match! "
-			       "cachetime = %d",
-			       cachetime);
-		  return cachetime;
-		}
-	}
-
-	default_cachetime_regex_config =
-		default_cachetime_regex_match(config, r->uri);
-	if (default_cachetime_regex_config != NULL) {
-		cachetime = 
-			default_cachetime_regex_config->cachetime;
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			     "Got cachetime from regex match! cachetime = %d",
-			     cachetime);
-		return cachetime;
-	}
-	
-	default_cachetime_config = 
-		default_cachetime_longest_match(config, r->uri);
-	if (default_cachetime_config != NULL) {
-		cachetime = default_cachetime_config->cachetime;
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-			     r->server,"Got cachetime from normal match "
-			     "cachetime = %d", cachetime);
-		return cachetime;
-	}
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-		     "Using normal cachetime %d", DEFAULT_CACHETIME);
-	return DEFAULT_CACHETIME;
-}
-
 static apr_time_t parse_xwodan_expire(request_rec *r,
 				  char *xwodan, int cachetime, 
 				  int *cachetime_interval) 
@@ -330,6 +396,54 @@ static apr_time_t parse_xwodan_expire(request_rec *r,
 	}
 
 	return expire_time;
+}
+
+static int find_cache_time(wodan_config_t *config,
+			 request_rec *r,
+			 struct httpresponse *httpresponse)
+{
+	int cachetime;
+	wodan_default_cachetime_header_t *default_cachetime_header_config;
+	wodan_default_cachetime_regex_t *default_cachetime_regex_config;
+	wodan_default_cachetime_t *default_cachetime_config;
+	
+	if (httpresponse != NULL) {
+		default_cachetime_header_config = 
+			default_cachetime_header_match(config, httpresponse->headers);
+		if (default_cachetime_header_config != NULL) {
+			cachetime = default_cachetime_header_config->cachetime;
+			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
+			       r->server,
+			       "Got cachetime from header match! "
+			       "cachetime = %d",
+			       cachetime);
+		  return cachetime;
+		}
+	}
+
+	default_cachetime_regex_config =
+		default_cachetime_regex_match(config, r->uri);
+	if (default_cachetime_regex_config != NULL) {
+		cachetime = 
+			default_cachetime_regex_config->cachetime;
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
+			     "Got cachetime from regex match! cachetime = %d",
+			     cachetime);
+		return cachetime;
+	}
+	
+	default_cachetime_config = 
+		default_cachetime_longest_match(config, r->uri);
+	if (default_cachetime_config != NULL) {
+		cachetime = default_cachetime_config->cachetime;
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
+			     r->server,"Got cachetime from normal match "
+			     "cachetime = %d", cachetime);
+		return cachetime;
+	}
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
+		     "Using normal cachetime %d", DEFAULT_CACHETIME);
+	return DEFAULT_CACHETIME;
 }
 
 static char *get_expire_time(wodan_config_t *config,
@@ -588,126 +702,4 @@ int cache_update_expiry_time(wodan_config_t *config, request_rec *r)
 
 /** static functions down here */
 
-char * sha1_to_hex(request_rec *r, const unsigned char *sha1)
-{
-	static const char hex[] = "0123456789abcdef";
-	char buffer[50], *buf = buffer;
-	int i;
 
-	for (i = 0; i < 20; i++) {
-		unsigned int val = *sha1++;
-		*buf++ = hex[val >> 4];
-		*buf++ = hex[val & 0xf];
-	}
-	*buf = '\0';
-
-	return apr_pstrdup(r->pool, buffer);
-}
-
-static int get_cache_filename(wodan_config_t *config, request_rec *r, char **filename )
-{
-	unsigned char digest[APR_SHA1_DIGESTSIZE];
-	char dir[MAX_CACHEFILE_PATH_LENGTH + 1];
-	char *checksum;
-	char *ptr;
-	int i;
-	struct apr_sha1_ctx_t sha;
-
-	apr_array_header_t *headers = config->hash_headers;
-
-	apr_sha1_init(&sha);
-	apr_sha1_update(&sha, r->hostname, strlen(r->hostname));
-	apr_sha1_update(&sha, r->unparsed_uri, strlen(r->unparsed_uri));
-
-        if (headers) {
-                int i = 0;
-
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "loop: %d",  i);
-
-                for(i = 0; i < headers->nelts; i++) {
-			const char *key = ((const char **)headers->elts)[i];
-			const char *value = apr_table_get(r->headers_in, (const char *)key);
-
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Lookup request-header for hash [%s]", key);
-
-			if (value) {
-				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Found header for hash [%s: %s]", key, value);
-				apr_sha1_update(&sha, value, strlen(value));
-			}
-                }
-        }
-
-
-	apr_sha1_final(digest, &sha);
-
-	checksum = sha1_to_hex(r, digest);
-
-	/* If cachedir + subdirs + checksum don't fit in buffer, 
-	 * we have a problem */
-	if (strlen(config->cachedir) > 
-	     (MAX_CACHEFILE_PATH_LENGTH - 32 - (2 * MAX_CACHEDIR_LEVELS))) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, 
-			     "Cachefile pathname doesn't fit into buffer.");
-		*filename = NULL;
-		return 0;
-	}
-
-	apr_cpystrn(dir, config->cachedir, MAX_CACHEFILE_PATH_LENGTH + 1);
-	ptr = &dir[0] + (int) strlen(dir);
-	
-	if (*ptr == '/')
-		ptr--;
-
-	for (i = 0; i < config->cachedir_levels; i++) {
-		ptr[0] = '/';
-		ptr[1] = checksum[i];
-		ptr += 2;
-	}
-	*ptr = '\0';
-
-	*filename = ap_make_full_path(r->pool, dir, checksum);
-	return 1;
-}
-
-static char *get_cache_file_subdir(wodan_config_t *config, request_rec *r, 
-				   char *cachefilename, int nr)
-{
-	int count;
-	char *ptr;
-	char *buffer;
-
-	buffer = apr_pstrdup(r->pool, cachefilename);
-
-	/* We count back (from the end of the path) just enough parts 
-	   to get the desired subdir */
-	count = config->cachedir_levels - nr;
-	ptr = buffer + (int) strlen(buffer);
-
-	while ( ( count > 0 ) && ( ptr > buffer ) ) {
-		if ( *ptr == '/' ) {
-			*ptr = '\0';
-			count--;
-		}
-		ptr--;
-	}
-
-	return buffer;
-}
-
-static int is_response_cacheable (int httpcode, int cache404s)
-{
-	if ( cache404s && (httpcode == 404))
-		return 1;
-
-	if ( (httpcode >= 200) && (httpcode < 400) )
-		return 1;
-
-	return 0;
-}
-
-static int is_cachedir_set(wodan_config_t* config)
-{
-	if (config->is_cachedir_set)
-		return 1;
-	return 0;
-}
