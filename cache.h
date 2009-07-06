@@ -6,15 +6,13 @@
 #define CACHE_H
 
 #include <time.h>
-
 #include "datatypes.h"
-
 #include "apr_time.h"
 
 /**
  * This is used when allocating buffers to work with
  */
-#define MAX_CACHEFILE_PATH_LENGTH 256
+#define MAX_CACHEFILE_PATH_LENGTH 512
 
 /**
  * used for signaling if a URI is present in the cache

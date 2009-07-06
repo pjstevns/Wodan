@@ -393,6 +393,7 @@ static const char* add_hash_header_match(cmd_parms *cmd,
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *) ap_get_module_config(s->module_config, &wodan_module);
 	ap_regex_t *compiled_pattern = NULL;
+	wodan_hash_header_match_t *directive;
 
 	compiled_pattern = ap_pregcomp(cmd->pool, regex_pattern, AP_REG_EXTENDED);
 	if (compiled_pattern == NULL) {
@@ -400,6 +401,11 @@ static const char* add_hash_header_match(cmd_parms *cmd,
 			"Failure compiling regex pattern \"%s\"", regex_pattern);
 		return error_message;
 	}	
+
+	directive = apr_array_push(config->hash_headers_match);
+	directive->header = apr_pstrdup(cmd->pool, headername);
+	directive->regex = compiled_pattern;
+	directive->pattern = apr_pstrdup(cmd->pool, replacement);
 	
 	return NULL;
 }

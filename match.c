@@ -87,8 +87,7 @@ default_cachetime_regex_match(wodan_config_t *config, char *uri)
 	wodan_default_cachetime_regex_t *list;
 	int i;
 	
-	list = (wodan_default_cachetime_regex_t*) 
-		config->default_cachetimes_regex->elts;
+	list = (wodan_default_cachetime_regex_t*) config->default_cachetimes_regex->elts;
 	for (i = 0; i < config->default_cachetimes_regex->nelts; i++) {
 		if (ap_regexec(list[i].uri_pattern, uri, 0, NULL, 0) == 0)
 			return &list[i];
@@ -105,8 +104,7 @@ default_cachetime_header_match(wodan_config_t *config, apr_table_t *headers)
 	int i;
 
 	
-	list = (wodan_default_cachetime_header_t*)
-		config->default_cachetimes_header->elts;
+	list = (wodan_default_cachetime_header_t*) config->default_cachetimes_header->elts;
 	for (i = 0; i < config->default_cachetimes_header->nelts; i++) {
 		header = list[i].header;
 		header_value = (char*) apr_table_get(headers, header);

@@ -125,26 +125,66 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 	int i;
 	struct apr_sha1_ctx_t sha;
 
-	apr_array_header_t *headers = config->hash_headers;
+	apr_array_header_t *headers;
 
 	apr_sha1_init(&sha);
 	apr_sha1_update(&sha, r->hostname, strlen(r->hostname));
 	apr_sha1_update(&sha, r->unparsed_uri, strlen(r->unparsed_uri));
 
+	/* handle WodanHashHeader directives */
+	headers = config->hash_headers;
         if (headers) {
                 int i = 0;
-
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "loop: %d",  i);
-
                 for(i = 0; i < headers->nelts; i++) {
 			const char *key = ((const char **)headers->elts)[i];
-			const char *value = apr_table_get(r->headers_in, (const char *)key);
-
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Lookup request-header for hash [%s]", key);
+			const char *value = apr_table_get(r->headers_in, key);
 
 			if (value) {
-				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Found header for hash [%s: %s]", key, value);
+				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG,
+						0, r->server, "Found header for hash [%s: %s]", 
+						key, value);
 				apr_sha1_update(&sha, value, strlen(value));
+			}
+                }
+        }
+
+	/* handle WodanHashHeaderMatch directives */
+	headers = config->hash_headers_match;
+        if (headers) {
+                int i = 0;
+		wodan_hash_header_match_t *match = (wodan_hash_header_match_t *)headers->elts;
+                for(i = 0; i < headers->nelts; i++) {
+			const char *key = match[i].header;
+			ap_regex_t *exp = match[i].regex;
+			const char *rep = match[i].pattern;
+
+			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG,
+					0, r->server, "Lookup header [%s]", match[i].header);
+
+			const char *val, *value = apr_table_get(r->headers_in, key);
+
+			if (value) {
+				val = NULL;
+				apr_size_t nmatch = 5;
+				ap_regmatch_t pmatch[5];
+				if (ap_regexec(exp, value, nmatch, pmatch, 0) == 0) {
+					if (rep)
+						val = ap_pregsub(r->pool, rep, value, nmatch , pmatch);
+					else
+						val = value;
+
+					if (val) {
+						ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG,
+								0, r->server, "Found header match [%s: %s] -> use [%s]", 
+								key, value, val);
+						apr_sha1_update(&sha, val, strlen(val));
+					}
+				} else {
+					ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG,
+							0, r->server, "No match on [%s: %s]", 
+							key, value);
+				}
+					
 			}
                 }
         }
