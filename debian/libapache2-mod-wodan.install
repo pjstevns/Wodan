@@ -1,0 +1,3 @@
+debian/mod_wodan.load etc/apache2/mods-available
+README usr/share/doc/libapache2-mod-wodan
+.libs/mod_wodan.so usr/lib/apache2/modules
