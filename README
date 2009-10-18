@@ -187,7 +187,14 @@ sections:
 	WodanHashHeaderMatch <http-header> <regexpattern>
 	-------------------------------------------------
 
-	TODO
+	This adds regexp matching on headers, and allows substitions as well:
+
+	for example, use:
+
+	WodanHashHeaderMatch Cookie '.*(I18N_LANGUAGE=[^;]+).*' $1
+
+	to extract the I18N_LANGUAGE cookie and use it in calculating the hash
+	for a particular request.
 
 	--------------	
 	WodanCacheDir <dir>
