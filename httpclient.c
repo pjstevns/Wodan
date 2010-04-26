@@ -129,24 +129,6 @@ static void adjust_dates(request_rec *r, struct httpresponse *httpresponse);
  * Remove all connection based header from the table
  * Copied from mod_proxy
  */
-static void ap_reverseproxy_clear_connection(apr_pool_t *p, apr_table_t *headers);
-
-
-
-/**
- * entry point in this source file. Performs the whole process
- * of getting the requested content from the backend and writing
- * it to the client and the cache (if appropriate)
- * @param[in] proxyurl url of proxy
- * @param[in] uri of requested object.
- * @param[out] httpresponse response from backend
- * @param[in,out] r request record
- * @param cache_file_time creation time of cache file (or (time_t) 0 if there's
- * 		no cache file.
- * @retval HTTP_BAD_GATEWAY if error in connection .
- * @retval HTTP_GATEWAY_TIME_OUT if connection to backend timeout out.
- * @retval OK if connection OK.
- */
 
 static void ap_reverseproxy_clear_connection(apr_pool_t *p, apr_table_t *headers)
 {
@@ -232,8 +214,6 @@ static int send_complete_request(apr_socket_t *socket, request_rec *r,
 	apr_table_set(out_headers, "Connection", "close");
 	apr_table_unset(out_headers, "Via");
 	if (send_headers(socket, r, out_headers) == -1)
-		return -1;
-	if (connection_flush_write_stream(socket, r) == -1)
 		return -1;
 
 	if((result = send_request_body(socket, r)))
@@ -360,8 +340,6 @@ static int send_request_body(apr_socket_t *socket, request_rec *r)
 						   nr_bytes_read) == -1) 
 				return -1;
 		}
-		if (connection_flush_write_stream(socket, r) == -1)
-			return -1;
 	}
 	return OK;
 }
@@ -614,8 +592,38 @@ static void adjust_dates(request_rec *r, struct httpresponse *httpresponse)
 			wodan_date_canon(r->pool, datestr));
 }
 
+static apr_socket_t* connection_open (wodan_config_t *config, char* host, int port, request_rec *r, int do_ssl UNUSED)
+{
+	apr_socket_t *socket;
+	apr_sockaddr_t *server_address;
+	
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,r->server, "Looking up host %s", host);
+	if (apr_sockaddr_info_get(&server_address, host, APR_UNSPEC, port, 0, r->pool) != APR_SUCCESS) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Hostname lookup failure for: %s", host);
+		return NULL;
+	}
+	
+	if (apr_socket_create(&socket, APR_INET, SOCK_STREAM, APR_PROTO_TCP,  r->pool) != APR_SUCCESS) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Error creating socket");
+		return NULL;
+	}
 
-int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* uri, 
+	if (config->backend_timeout > 0) {
+		apr_socket_timeout_set(socket, config->backend_timeout);
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "socket timeout set to %ld", config->backend_timeout);
+	}
+	if (apr_socket_connect(socket, server_address) != APR_SUCCESS) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Socket error while connecting to server at %s:%d", host, port);
+		return NULL;
+	}
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Succesfully connected to %s:%d", host, port);
+
+	return socket;
+}
+
+
+
+int http_proxy (wodan_config_t *config, const char* proxyurl, char* uri, 
 		   struct httpresponse* httpresponse, 
 		   request_rec *r, apr_time_t cache_file_time)
 {
@@ -643,7 +651,7 @@ int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* uri,
 		     "Destination: %s %d %s", desthost, destport, destpath);
 	
 	//Connect to proxyhost
-	socket = networkconnect(config, desthost, destport, r, do_ssl);
+	socket = connection_open(config, desthost, destport, r, do_ssl);
 	if(socket == NULL)
 	{
 		httpresponse->response = HTTP_BAD_GATEWAY;
@@ -655,13 +663,14 @@ int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* uri,
 	ap_reverseproxy_clear_connection(p, out_headers);
 	
 	/* send request */
-	if (send_complete_request(socket, r, dest_host_and_port, destpath,
-				  out_headers, cache_file_time) == -1) {
-		connection_close(socket, r);
+	if (send_complete_request(socket, r, dest_host_and_port, destpath, out_headers, cache_file_time) == -1) {
+		apr_socket_close(socket);
 		return HTTP_BAD_GATEWAY;
 	}	
 	
 	result = receive_complete_response(config, socket, r, httpresponse);
-	connection_close(socket, r);
+
+	apr_socket_close(socket);
+
 	return result;
 }
