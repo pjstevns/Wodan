@@ -11,17 +11,13 @@
 #include <unistd.h>
 #include <errno.h>
 
-network_connection_t* networkconnect (wodan_config_t *config, char* host, int port, 
-		request_rec *r, int do_ssl UNUSED)
+apr_socket_t* networkconnect (wodan_config_t *config, char* host, int port, request_rec *r, int do_ssl UNUSED)
 {
-	network_connection_t* network_connection;
 	apr_socket_t *socket;
 	apr_sockaddr_t *server_address;
 	
-	// TODO check if we need to allocate room for the socket
-	//	socket = apr_pcalloc(r->pool, sizeof(apr_socket_t));
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,r->server,
-		"Looking up host %s", host);
+	//socket = apr_pcalloc(r->pool, sizeof(apr_socket_t));
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,r->server, "Looking up host %s", host);
 	if (apr_sockaddr_info_get(&server_address, host, APR_UNSPEC, port, 0, r->pool) !=
 		APR_SUCCESS) {
 		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, 
@@ -29,10 +25,8 @@ network_connection_t* networkconnect (wodan_config_t *config, char* host, int po
 		return NULL;
 	}
 	
-	if (apr_socket_create(&socket, APR_INET, SOCK_STREAM, APR_PROTO_TCP,  r->pool) !=
-		APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, 
-			"Error creating socket");
+	if (apr_socket_create(&socket, APR_INET, SOCK_STREAM, APR_PROTO_TCP,  r->pool) != APR_SUCCESS) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Error creating socket");
 		return NULL;
 	}
 
@@ -49,78 +43,74 @@ network_connection_t* networkconnect (wodan_config_t *config, char* host, int po
 	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
 		"Succesfully connected to %s:%d", host, port);
 
-	network_connection = 
-		(network_connection_t *) apr_pcalloc(r->pool, sizeof(network_connection_t));
-
-	network_connection->socket = socket;
-	return network_connection;	
+	return socket;
 }
 
-int connection_close_connection(network_connection_t *connection,
+int connection_close(apr_socket_t *socket,
 	const request_rec *r UNUSED)
 {
 	/* no need to do anything. This is done by apache internal 
 	   functions */
-	apr_socket_close(connection->socket);
+	apr_socket_close(socket);
 	return 0;
 }
 
-int connection_write_bytes(network_connection_t *connection,
+int connection_write_bytes(apr_socket_t *socket,
 	const request_rec *r,
 	const char *buffer, int buffersize) 
 {
 	apr_size_t nr_bytes = (apr_size_t) buffersize;
 	apr_status_t socket_status;
 
-	socket_status = apr_socket_send(connection->socket, buffer, &nr_bytes);
+	socket_status = apr_socket_send(socket, buffer, &nr_bytes);
 	if (socket_status == APR_TIMEUP) {
 		ap_log_error(APLOG_MARK, APLOG_ERR | APLOG_DEBUG, 0, r->server,
 			"write to backend timed out");
 		return -1;
 	}
-    if (nr_bytes < ((apr_size_t) buffersize)) { 
-     	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-     		"%s:%s: error writing bytes to backend.",
-     		__FILE__, __func__); 
-	  	return -1;
-     }
+	if (nr_bytes < ((apr_size_t) buffersize)) { 
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
+				"%s:%s: error writing bytes to backend.",
+				__FILE__, __func__); 
+		return -1;
+	}
 
-     return (int) nr_bytes;
+	return (int) nr_bytes;
 }
 
-int connection_read_bytes(network_connection_t *connection,
+int connection_read_bytes(apr_socket_t *socket,
 	const request_rec *r, char *buffer, int buffersize) 
 {
-    apr_size_t nr_bytes = (apr_size_t) buffersize;
-    apr_status_t socket_status;
-     
-    socket_status = apr_socket_recv(connection->socket, buffer, &nr_bytes);
-	
+	apr_size_t nr_bytes = (apr_size_t) buffersize;
+	apr_status_t socket_status;
+
+	socket_status = apr_socket_recv(socket, buffer, &nr_bytes);
+
 	if (socket_status != APR_SUCCESS) {
 		if (socket_status == APR_TIMEUP) {
 			ap_log_error(APLOG_MARK, APLOG_ERR | APLOG_DEBUG, 0, r->server,
-				"read from backend timed out");
+					"read from backend timed out");
 			return -1;
 		}
 		if ((nr_bytes != (apr_size_t) buffersize) && socket_status != APR_EOF) {
 			ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-	 			"error reading bytes from backend, read %lu bytes, "
-	 			"buffersize = %d, err = %d", nr_bytes, buffersize, socket_status);
-	  		return -1;
+					"error reading bytes from backend, read %lu bytes, "
+					"buffersize = %d, err = %d", nr_bytes, buffersize, socket_status);
+			return -1;
 		}
-	 }
-     return (int) nr_bytes;
+	}
+	return (int) nr_bytes;
 }
 	  
-int connection_write_string(network_connection_t *connection,
+int connection_write_string(apr_socket_t *socket,
 	const request_rec *r, const char *the_string)
 {
 	int len = (int) strlen(the_string);
 	
-	return connection_write_bytes(connection, r, the_string, len);
+	return connection_write_bytes(socket, r, the_string, len);
 }
 
-char *connection_read_string(network_connection_t *connection,
+char *connection_read_string(apr_socket_t *socket,
 	const request_rec *r)
 {
 	char *buffer = (char *) apr_pcalloc(r->pool, BUFFERSIZE);
@@ -130,11 +120,11 @@ char *connection_read_string(network_connection_t *connection,
 	
 	while(index < BUFFERSIZE && !end_of_line) {
 		apr_status_t socket_status;
-		socket_status = apr_socket_recv(connection->socket, &(buffer[index]), 
+		socket_status = apr_socket_recv(socket, &(buffer[index]), 
 			&byte_read);
 		if (socket_status == APR_TIMEUP) {
 			apr_interval_time_t timeout;
-			apr_socket_timeout_get(connection->socket, &timeout);
+			apr_socket_timeout_get(socket, &timeout);
 			ap_log_error(APLOG_MARK, APLOG_ERR | APLOG_DEBUG, 0, r->server,
 				"read from backend connection timed out, timeout = %ld", timeout);
 				
@@ -155,9 +145,7 @@ char *connection_read_string(network_connection_t *connection,
      return buffer;
 }
 
-int connection_flush_write_stream(
-	network_connection_t *connection UNUSED,
-	const request_rec *r UNUSED)
+int connection_flush_write_stream( apr_socket_t *socket UNUSED, const request_rec *r UNUSED)
 {			  
      /* noop */
      return 1;

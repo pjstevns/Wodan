@@ -30,21 +30,6 @@
 #include "apr_strmatch.h"
 #include "apr_version.h"
 
-/* detect if APR > 1.0 is used */
-#if APR_MAJOR_VERSION < 1
-#define ap_regex_t        regex_t
-#define ap_regmatch_t     regmatch_t
-#define ap_regcomp(a,b,c) regcomp((a),(b),(c))
-#define ap_regfree(a)     regfree(a)
-#define AP_REG_ICASE      REG_ICASE
-#define AP_REG_NEWLINE    REG_NEWLINE
-#define AP_REG_NOTBOL     REG_NOTBOL
-#define AP_REG_NOTEOL     REG_NOTEOL
-#define AP_REG_EXTENDED   REG_EXTENDED
-#define AP_REG_NOSUB      REG_NOSUB
-#define apr_socket_create(a,b,c,d,e) apr_socket_create(a,b,c,e)
-#endif
-
 /**
  * Structure that contains the config elements of wodan
  */
@@ -133,7 +118,4 @@ typedef struct httpresponse {
 	int response;//The response code
 } httpresponse_t;
 
-typedef struct network_connection {
-	apr_socket_t *socket;
-} network_connection_t;
 #endif //_DATATYPES_H_

@@ -47,7 +47,7 @@ static apr_status_t get_destination_parts(apr_pool_t *p,
  * @param modified_time set 'If-Modified-Since'-header 
  * @retval -1 on error.
  */
-static int send_request(network_connection_t *connection, 
+static int send_request(apr_socket_t *socket, 
 			request_rec *r, const char *dest_host,
 			const char *dest_path, apr_time_t modified_time);
 
@@ -56,7 +56,7 @@ static int send_request(network_connection_t *connection,
  * @param connection connection struct
  * @param r request record
  */
-static int send_request_body(network_connection_t *connection,
+static int send_request_body(apr_socket_t *socket,
 			request_rec *r);
 
 /**
@@ -75,7 +75,7 @@ static void add_x_headers(const request_rec *r,
  * @retval OK on succes
  * @retval -1 on failure.
  */
-static int send_headers(network_connection_t *connection, 
+static int send_headers(apr_socket_t *socket, 
 			 const request_rec *r, const apr_table_t *headers);
 
 /**
@@ -87,7 +87,7 @@ static int send_headers(network_connection_t *connection,
  * @param out_headers headers sent to backend
  * @param modified_time last modified time in cache
  */
-static int send_complete_request(network_connection_t *connection,
+static int send_complete_request(apr_socket_t *socket,
 			  request_rec *r,
 			  const char *dest_host,
 			  const char *dest_path,
@@ -101,7 +101,7 @@ static int send_complete_request(network_connection_t *connection,
  * @return OK if finished
  */
 static int receive_complete_response(wodan_config_t *config,
-	network_connection_t *connection, request_rec *r,  
+	apr_socket_t *socket, request_rec *r,  
 	httpresponse_t *httpresponse);
 
 /** receive status line from backend
@@ -110,37 +110,21 @@ static int receive_complete_response(wodan_config_t *config,
  * @param httpresponse will hold response.
  * @return status, or -1 if no response
  */
-static int receive_status_line(network_connection_t *connection, request_rec *r,
+static int receive_status_line(apr_socket_t *socket, request_rec *r,
 			struct httpresponse *httpresponse);
 
 /**
  * receive headers from backend
  */
-static int receive_headers(network_connection_t *connection, request_rec *r,
+static int receive_headers(apr_socket_t *socket, request_rec *r,
 		     struct httpresponse *httpresponse);
 
 /** receive the body of the response from the backend */
-static int receive_body(wodan_config_t *config, network_connection_t *connection, 
+static int receive_body(wodan_config_t *config, apr_socket_t *socket, 
 	request_rec *r, httpresponse_t *httpresponse, apr_file_t *cache_file);
 /** adjust dates to one form */
 static void adjust_dates(request_rec *r, struct httpresponse *httpresponse);
 
-/** do the real work 
- * @param config the wodan configuration
- * @param proxyurl URL to proxy
- * @param uri URI to retrieve
- * @param[in,out] httpresponse httpresponse
- * @param r request_rec
- * @param cache_file_time creation time of cache file (or (time_t) 0 if there's
- * 		no cache file.
- * @retval OK if all ok
- * @retval HTTP_BAD_GATEWAY if problem connecting or retreiving
- */
-static int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* uri, 
-		   struct httpresponse* httpresponse, 
-		   request_rec *r, 
-		   apr_time_t cache_file_time);
-		   
 /**
  * Remove all connection based header from the table
  * Copied from mod_proxy
@@ -163,18 +147,6 @@ static void ap_reverseproxy_clear_connection(apr_pool_t *p, apr_table_t *headers
  * @retval HTTP_GATEWAY_TIME_OUT if connection to backend timeout out.
  * @retval OK if connection OK.
  */
-int http_proxy(wodan_config_t *config, const char* proxyurl, char *uri,
-	       struct httpresponse *httpresponse,
-	       request_rec *r,
-	       apr_time_t cache_file_time)
-{
-	int result = HTTP_BAD_GATEWAY;
-
-	result = do_http_proxy(config, proxyurl, uri,
-			       httpresponse, r, cache_file_time);
-	
-	return result;
-}
 
 static void ap_reverseproxy_clear_connection(apr_pool_t *p, apr_table_t *headers)
 {
@@ -249,39 +221,39 @@ static apr_status_t get_destination_parts(apr_pool_t *p,
 	return APR_SUCCESS;
 }
 
-static int send_complete_request(network_connection_t *connection, request_rec *r, 
+static int send_complete_request(apr_socket_t *socket, request_rec *r, 
 		const char *dest_host_and_port, const char *dest_path, apr_table_t *out_headers,
 		apr_time_t modified_time) {
 	int result;
 
-	if(send_request(connection, r, dest_host_and_port, dest_path, modified_time) < 0)
+	if(send_request(socket, r, dest_host_and_port, dest_path, modified_time) < 0)
 		return -1;
 	add_x_headers(r, out_headers);
 	apr_table_set(out_headers, "Connection", "close");
 	apr_table_unset(out_headers, "Via");
-	if (send_headers(connection, r, out_headers) == -1)
+	if (send_headers(socket, r, out_headers) == -1)
 		return -1;
-	if (connection_flush_write_stream(connection, r) == -1)
+	if (connection_flush_write_stream(socket, r) == -1)
 		return -1;
 
-	if((result = send_request_body(connection, r)))
+	if((result = send_request_body(socket, r)))
 		return result;
 	
 	return OK;
 }
 
-static int send_request(network_connection_t *connection, request_rec *r,
+static int send_request(apr_socket_t *socket, request_rec *r,
 		const char *dest_host_and_port, const char *dest_path, apr_time_t modified_time) {
 	const char *request_string;
 	const char *host_header_string;
 	
 	request_string = apr_psprintf(r->pool, "%s %s HTTP/1.0%s",
 				     r->method, dest_path, CRLF);
-	if (connection_write_string(connection, r, request_string) == -1)
+	if (connection_write_string(socket, r, request_string) == -1)
 		return -1;
 	host_header_string = apr_psprintf(r->pool, "Host: %s%s",
 					 dest_host_and_port, CRLF);
-	if (connection_write_string(connection, r, 
+	if (connection_write_string(socket, r, 
 				    host_header_string) == -1)
 		return -1;
 	if (modified_time != APR_DATE_BAD) {
@@ -294,7 +266,7 @@ static int send_request(network_connection_t *connection, request_rec *r,
 		if_modified_header = apr_psprintf(r->pool, "If-Modified-Since: %s%s",
 				if_modified_header_value, CRLF);
 		
-		if (connection_write_string(connection, r, if_modified_header) == -1)
+		if (connection_write_string(socket, r, if_modified_header) == -1)
 			return -1;
 	} 
 	return OK;
@@ -324,7 +296,7 @@ static void add_x_headers(const request_rec *r,
 	apr_table_set(out_headers_to_backend, "X-Wodan-Protocol", r->protocol);
 }
 
-static int send_headers(network_connection_t *connection, 
+static int send_headers(apr_socket_t *socket, 
 		  const request_rec *r, const apr_table_t *headers) 
 {
 	int i;
@@ -357,20 +329,20 @@ static int send_headers(network_connection_t *connection,
 					    headers_elts[i].key,
 					    headers_elts[i].val, 
 					    CRLF);
-		if (connection_write_string(connection, r, 
+		if (connection_write_string(socket, r, 
 					    header_string) == -1)
 			return -1;
 	}
 	/* add empty line, signals end of headers */
 	header_end_string = apr_psprintf(r->pool, "%s", CRLF);
-	if (connection_write_string(connection, r,
+	if (connection_write_string(socket, r,
 				    header_end_string) == -1)
 		return -1;
 
 	return OK;
 }
 
-static int send_request_body(network_connection_t *connection, request_rec *r)
+static int send_request_body(apr_socket_t *socket, request_rec *r)
 {
 	int result;
 
@@ -383,19 +355,19 @@ static int send_request_body(network_connection_t *connection, request_rec *r)
 
 		while ((nr_bytes_read = 
 			ap_get_client_block(r, buffer, BUFFERSIZE)) > 0) { 
-			if (connection_write_bytes(connection, r,
+			if (connection_write_bytes(socket, r,
 						   buffer,
 						   nr_bytes_read) == -1) 
 				return -1;
 		}
-		if (connection_flush_write_stream(connection, r) == -1)
+		if (connection_flush_write_stream(socket, r) == -1)
 			return -1;
 	}
 	return OK;
 }
        
 static int receive_complete_response(wodan_config_t *config, 
-	network_connection_t *connection, request_rec *r, 
+	apr_socket_t *socket, request_rec *r, 
 	httpresponse_t *httpresponse) 
 {
 	int status;
@@ -403,7 +375,7 @@ static int receive_complete_response(wodan_config_t *config,
 	int receive_body_result;
 	apr_file_t *cache_file = NULL;
 
-	if ((status = receive_status_line(connection, r, httpresponse)) == -1) 
+	if ((status = receive_status_line(socket, r, httpresponse)) == -1) 
 		return HTTP_BAD_GATEWAY;
 	
 	if (status == HTTP_NOT_FOUND) {
@@ -422,7 +394,7 @@ static int receive_complete_response(wodan_config_t *config,
 		return status;
 	}
 	
-	if ((receive_headers_result = receive_headers(connection, r, httpresponse)) != OK) 
+	if ((receive_headers_result = receive_headers(socket, r, httpresponse)) != OK) 
 		return receive_headers_result;
 		
 	
@@ -434,20 +406,20 @@ static int receive_complete_response(wodan_config_t *config,
 
 	adjust_headers_for_sending(config, r, httpresponse);
 	
-	if ((receive_body_result = receive_body(config, connection, r, httpresponse, cache_file)) != OK)
+	if ((receive_body_result = receive_body(config, socket, r, httpresponse, cache_file)) != OK)
 		return receive_body_result;
 
 	return status;
 }
 
-static int receive_status_line(network_connection_t *connection, request_rec *r,
+static int receive_status_line(apr_socket_t *socket, request_rec *r,
 	httpresponse_t *httpresponse)
 {
 	const char *read_string;
 	const char *http_string, *status_string;
 	int status;
 
-	read_string = connection_read_string(connection, r);
+	read_string = connection_read_string(socket, r);
 	if (read_string == NULL)
 		return -1;
 
@@ -464,7 +436,7 @@ static int receive_status_line(network_connection_t *connection, request_rec *r,
 	return status;
 }
 
-static int receive_headers(network_connection_t *connection, request_rec *r,
+static int receive_headers(apr_socket_t *socket, request_rec *r,
 		    struct httpresponse *httpresponse)
 {
 	const char *read_header;
@@ -475,7 +447,7 @@ static int receive_headers(network_connection_t *connection, request_rec *r,
 	int val_pos, len;
 	
 	header = 0;
-	while((read_header = connection_read_string(connection, r))) {
+	while((read_header = connection_read_string(socket, r))) {
 		/* if read_header is NULL, this signals an error. Escape from here right
 		 * away in that case */
 		if (read_header == NULL)
@@ -527,7 +499,7 @@ static int receive_headers(network_connection_t *connection, request_rec *r,
 	return OK;
 }
 
-static int receive_body(wodan_config_t *config, network_connection_t *connection, 
+static int receive_body(wodan_config_t *config, apr_socket_t *socket, 
 	request_rec *r, httpresponse_t *httpresponse, apr_file_t *cache_file)
 {
 	char *buffer;
@@ -545,7 +517,7 @@ static int receive_body(wodan_config_t *config, network_connection_t *connection
 
 	while(1)
 	{
-		nr_bytes_read = connection_read_bytes(connection, r, buffer, BUFFERSIZE);
+		nr_bytes_read = connection_read_bytes(socket, r, buffer, BUFFERSIZE);
 		//nr_bytes_read = fread(buffer, sizeof(char), BUFFERSIZE, 
 		//		      connection->readstream);
 		ap_log_error(APLOG_MARK, APLOG_DEBUG|APLOG_NOERRNO, 0,
@@ -643,11 +615,10 @@ static void adjust_dates(request_rec *r, struct httpresponse *httpresponse)
 }
 
 
-static int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* uri, 
+int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* uri, 
 		   struct httpresponse* httpresponse, 
 		   request_rec *r, apr_time_t cache_file_time)
 {
-	network_connection_t* connection;
 	int result = OK;
 	char *desthost, *destpath;
 	char *dest_host_and_port;
@@ -655,6 +626,7 @@ static int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* ur
 	int do_ssl;
 	apr_pool_t* p = r->pool;
 	apr_table_t *out_headers;
+	apr_socket_t *socket;
 	int gdp_retval = 0;
 
 	if ((gdp_retval = get_destination_parts(p, proxyurl, uri,
@@ -671,8 +643,8 @@ static int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* ur
 		     "Destination: %s %d %s", desthost, destport, destpath);
 	
 	//Connect to proxyhost
-	connection = networkconnect(config, desthost, destport, r, do_ssl);
-	if(connection == NULL)
+	socket = networkconnect(config, desthost, destport, r, do_ssl);
+	if(socket == NULL)
 	{
 		httpresponse->response = HTTP_BAD_GATEWAY;
 		return HTTP_BAD_GATEWAY;//TODO BAD_GATEWAY??
@@ -683,13 +655,13 @@ static int do_http_proxy (wodan_config_t *config, const char* proxyurl, char* ur
 	ap_reverseproxy_clear_connection(p, out_headers);
 	
 	/* send request */
-	if (send_complete_request(connection, r, dest_host_and_port, destpath,
+	if (send_complete_request(socket, r, dest_host_and_port, destpath,
 				  out_headers, cache_file_time) == -1) {
-		connection_close_connection(connection, r);
+		connection_close(socket, r);
 		return HTTP_BAD_GATEWAY;
 	}	
 	
-	result = receive_complete_response(config, connection, r, httpresponse);
-	connection_close_connection(connection, r);
+	result = receive_complete_response(config, socket, r, httpresponse);
+	connection_close(socket, r);
 	return result;
 }
