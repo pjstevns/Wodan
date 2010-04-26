@@ -39,7 +39,7 @@ network_connection_t* networkconnect (wodan_config_t *config, char* host, int po
 	if (config->backend_timeout > 0) {
 		apr_socket_timeout_set(socket, config->backend_timeout);
 		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-			"socket timeout set to %llu", config->backend_timeout);
+			"socket timeout set to %ld", config->backend_timeout);
 	}
 	if (apr_socket_connect(socket, server_address) != APR_SUCCESS) {
 		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, 
@@ -136,7 +136,7 @@ char *connection_read_string(network_connection_t *connection,
 			apr_interval_time_t timeout;
 			apr_socket_timeout_get(connection->socket, &timeout);
 			ap_log_error(APLOG_MARK, APLOG_ERR | APLOG_DEBUG, 0, r->server,
-				"read from backend connection timed out, timeout = %lld", timeout);
+				"read from backend connection timed out, timeout = %ld", timeout);
 				
 			return NULL;
 		}
