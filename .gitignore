@@ -5,3 +5,10 @@ configure
 *.lo
 *.so
 *.slo
+.libs/
+Makefile
+autom4te.cache/
+config.log
+config.status
+cscope.out
+mod_wodan.la
