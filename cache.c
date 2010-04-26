@@ -7,7 +7,6 @@
 
 #include "cache.h"
 #include "datatypes.h"
-#include "match.h"
 #include "util.h"
 
 #include "httpd.h"
@@ -140,8 +139,10 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 			const char *value = apr_table_get(r->headers_in, key);
 
 			if (value) {
-				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG,
-						0, r->server, "Found header for hash [%s: %s]", 
+				ap_log_error(APLOG_MARK, 
+						APLOG_NOERRNO|APLOG_DEBUG,
+						0, r->server, 
+						"Found header for hash [%s: %s]", 
 						key, value);
 				apr_sha1_update(&sha, value, strlen(value));
 			}
@@ -332,9 +333,7 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r,
 		key = ap_getword(r->pool, (const char**) &bufferpointer, ':');
 		bufferpointer = util_skipspaces(bufferpointer);
 		while(bufferpointer[counter]) {
-			if(bufferpointer[counter] == CR || 
-					bufferpointer[counter] == LF || 
-					bufferpointer[counter] == '\n') {
+			if(bufferpointer[counter] == CR || bufferpointer[counter] == LF || bufferpointer[counter] == '\n') {
 				bufferpointer[counter] = '\0';
 				break;
 			}
@@ -438,6 +437,62 @@ static apr_time_t parse_xwodan_expire(request_rec *r,
 	return expire_time;
 }
 
+static wodan_default_cachetime_t* default_cachetime_longest_match(wodan_config_t *config,
+	char *uri)
+{
+	wodan_default_cachetime_t *longest, *list;
+	int length, i;
+
+	longest = NULL;
+	length = 0;
+	list = (wodan_default_cachetime_t*) config->default_cachetimes->elts;
+	for(i=0; i < config->default_cachetimes->nelts; i++)
+	{
+		int l = (int) strlen(list[i].path);
+
+		if(l > length && strncmp(list[i].path, uri, l) == 0)
+		{
+			longest = &list[i];
+			length = l;
+		}
+	}
+	return longest;
+}
+
+static wodan_default_cachetime_header_t* default_cachetime_header_match(wodan_config_t *config, apr_table_t *headers)
+{
+	wodan_default_cachetime_header_t *list;
+	const char *header;
+	char *header_value;
+	int i;
+
+	
+	list = (wodan_default_cachetime_header_t*) config->default_cachetimes_header->elts;
+	for (i = 0; i < config->default_cachetimes_header->nelts; i++) {
+		header = list[i].header;
+		header_value = (char*) apr_table_get(headers, header);
+		
+		if (header_value != NULL)
+			if (ap_regexec(list[i].header_value_pattern, header_value, 0, 
+				    NULL, 0) == 0)
+				return &list[i];
+	}
+	return NULL;
+}
+
+static wodan_default_cachetime_regex_t* default_cachetime_regex_match(wodan_config_t *config, char *uri)
+{
+	wodan_default_cachetime_regex_t *list;
+	int i;
+	
+	list = (wodan_default_cachetime_regex_t*) config->default_cachetimes_regex->elts;
+	for (i = 0; i < config->default_cachetimes_regex->nelts; i++) {
+		if (ap_regexec(list[i].uri_pattern, uri, 0, NULL, 0) == 0)
+			return &list[i];
+	}
+	return NULL;
+}
+	
 static int find_cache_time(wodan_config_t *config,
 			 request_rec *r,
 			 struct httpresponse *httpresponse)
@@ -448,8 +503,7 @@ static int find_cache_time(wodan_config_t *config,
 	wodan_default_cachetime_t *default_cachetime_config;
 	
 	if (httpresponse != NULL) {
-		default_cachetime_header_config = 
-			default_cachetime_header_match(config, httpresponse->headers);
+		default_cachetime_header_config = default_cachetime_header_match(config, httpresponse->headers);
 		if (default_cachetime_header_config != NULL) {
 			cachetime = default_cachetime_header_config->cachetime;
 			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
@@ -461,8 +515,7 @@ static int find_cache_time(wodan_config_t *config,
 		}
 	}
 
-	default_cachetime_regex_config =
-		default_cachetime_regex_match(config, r->uri);
+	default_cachetime_regex_config = default_cachetime_regex_match(config, r->uri);
 	if (default_cachetime_regex_config != NULL) {
 		cachetime = 
 			default_cachetime_regex_config->cachetime;

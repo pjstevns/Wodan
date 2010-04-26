@@ -9,9 +9,21 @@ top_builddir=$(apache_dir)
 APXS=@APXS@
 APACHECTL=$(apache_dir)/bin/apachectl
 
-SOURCE_FILES=mod_wodan.c cache.c httpclient.c networkconnector.c match.c util.c 
-INCLUDE_FILES=cache.h httpclient.h networkconnector.h match.h util.h
-OBJECT_FILES=mod_wodan.o cache.o httpclient.o networkconnector.o match.o util.o
+SOURCE_FILES=mod_wodan.c \
+	     cache.c \
+	     httpclient.c \
+	     networkconnector.c \
+	     util.c 
+INCLUDE_FILES=cache.h \
+	      httpclient.h \
+	      networkconnector.h \
+	      util.h
+OBJECT_FILES=mod_wodan.o \
+	     cache.o \
+	     httpclient.o \
+	     networkconnector.o \
+	     util.o
+
 DEFS=-W -Wall -Wpointer-arith -Wstrict-prototypes
 INCLUDES=-I$(apache_dir)/include
 

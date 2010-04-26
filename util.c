@@ -6,7 +6,6 @@
  */
  
 #include "datatypes.h"
-#include "match.h"
 #include "util.h"
 
 #include "httpd.h"
@@ -174,6 +173,26 @@ void wodan_table_add_when_empty(apr_table_t *base, apr_table_t *overlay)
 			apr_table_add(base, elts[i].key, elts[i].val);
 }
 
+static wodan_proxy_alias_t* alias_longest_match(wodan_config_t *config, char *uri)
+{
+	wodan_proxy_alias_t *longest, *list;
+	int length, i;
+
+	longest = NULL;
+	length = 0;
+	list = (wodan_proxy_alias_t *) config->proxy_passes_reverse->elts;
+	for(i=0; i < config->proxy_passes_reverse->nelts; i++)
+	{
+		int l = (int) strlen(list[i].path);
+
+		if(l > length && strncmp(list[i].path, uri, l) == 0)
+		{
+			longest = &list[i];
+			length = l;
+		}
+	}
+	return longest;
+}
 void apply_proxy_pass_reverse(wodan_config_t *config, apr_table_t* headers,
 	request_rec *r)
 {

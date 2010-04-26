@@ -1,5 +1,6 @@
 /* 
  * (c) 2000-2006 IC&S, The Netherlands
+ * (c) 2008-2010 NFG, The Netherlands
  */ 
 
 #define WODAN_NAME "Wodan"
@@ -14,7 +15,6 @@
 #include "cache.h"
 #include "datatypes.h"
 #include "httpclient.h"
-#include "match.h"
 #include "util.h"
 
 /* Apache includes */
@@ -27,118 +27,7 @@
 #include <string.h>
 #include <time.h>
 
-/*
- * Function prototypes.
- */
- 
-/* initializer for Wodan */
-static int wodan_init_handler(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp,
-	server_rec *s);
-/* create initial server configuration. */
-static void *wodan_create_server_config(apr_pool_t *p, server_rec *s);
-/* create per-dir server configuration */
-static void *wodan_create_dir_config(apr_pool_t *p, char *dir);
-/* merge two config structures. */
-static void *wodan_merge_config(apr_pool_t *p, void *base_config_p, 
-	void *new_config_p);
-/* add a WodanPass config to the configuration */
-static const char *add_pass(cmd_parms *cmd, void *dummy, const char *path,
-	const char *url);
-/* add a WodanPassReverse config to the configuration */
-static const char *add_pass_reverse(cmd_parms *cmd, void *dummy, const char *path,
-	const char *url);
-/* add cachedir */	
-static const char *add_cachedir(cmd_parms *cmd, void *dummy, const char *path);
-/* set level of cachedir nesting */
-static const char *add_cachedir_levels(cmd_parms *cmd, void *dummy, 
-	const char *level);
-/* add a default cachetime for a path */
-static const char *add_default_cachetime(cmd_parms *cmd, void *dummy,
-	const char *path, const char *time_string);
-/* add a default cachetime for a path matching a regular expression */
-static const char* add_default_cachetime_regex(cmd_parms *cmd, 
-	void *dummy, const char *regex_pattern, const char *time_string);
-/* add a header to the hash */
-static const char* add_hash_header(cmd_parms *cmd, 
-	void *dummy, const char *header);
-/* add a header to the hash if the value matches the regex pattern */
-static const char* add_hash_header_match(cmd_parms *cmd, 
-	void *dummy, const char *header, const char *regex_pattern, const char *replacement);
-/* add a default cachetime for a header whose value matches a regular expression */
-static const char* add_default_cachetime_header(cmd_parms *cmd, void *dummy, 
-	const char *http_header, const char *regex_pattern, const char *time_string);
-/* add a flag to run completely on the cache (i.e. do not try to contact the 
- * backend */
-static const char* add_run_on_cache(cmd_parms *cmd, void *dummy, int flag);
-/* add a flag to cache 404 pages. */
-static const char* add_cache_404s(cmd_parms *cmd, void *dummy, int flag);
-/* add a backend timeout */
-static const char *add_backend_timeout(cmd_parms *cmd, void *dummy,
-	const char *timeout_string);
-
-/* hook registering function */
-static void wodan_register_hooks(apr_pool_t *p);
-	
-/* The content handler function. This is the main function of Wodan */
-static int wodan_handler(request_rec *r);
-
-/**
- * The configuration directives and their setup functions.
- */
-static const command_rec wodan_commands[] = 
-{
-	AP_INIT_TAKE12("WodanPass", add_pass, NULL, RSRC_CONF, "A path and a URL"),
-	AP_INIT_TAKE12("WodanPassReverse", add_pass_reverse, 
-		NULL, RSRC_CONF, "A path and a URL"),
-	AP_INIT_TAKE1("WodanCacheDir", add_cachedir, NULL, RSRC_CONF, "A path"),
-	AP_INIT_TAKE1("WodanCacheDirLevels", add_cachedir_levels, NULL, RSRC_CONF, 
-		"A Number (> 0)"),
-	AP_INIT_TAKE2("WodanDefaultCacheTime", add_default_cachetime, NULL, RSRC_CONF,
-		"A path and a time string"),
-	AP_INIT_TAKE2("WodanDefaultCacheTimeMatch", add_default_cachetime_regex,
-		NULL, RSRC_CONF, "A regex pattern and a time string"),
-	AP_INIT_TAKE3("WodanDefaultCacheTimeHeaderMatch", 
-		add_default_cachetime_header, NULL, RSRC_CONF, 
-		"A header, a regex pattern and a time string"),
-	AP_INIT_TAKE1("WodanHashHeader",
-		add_hash_header, NULL, RSRC_CONF,
-		"A header to add to the hash"),
-	AP_INIT_TAKE23("WodanHashHeaderMatch",
-		add_hash_header_match, NULL, RSRC_CONF,
-		"A header to add to the hash if the regex pattern matches and an optional replacement pattern"),
-	AP_INIT_FLAG("WodanRunOnCache", add_run_on_cache, NULL, RSRC_CONF,
-		"run completely on cache"),
-	AP_INIT_FLAG("WodanCache404s", add_cache_404s, NULL, RSRC_CONF,
-		"cache 404 pages"),
-	AP_INIT_TAKE1("WodanBackendTimeout", add_backend_timeout, NULL, RSRC_CONF,
-		"a number, which represents a time in miliseconds"),
-	{NULL}
-};
-/* The module. Apache uses this information to initialise and hook up
- * the module into the webserver. */
-module AP_MODULE_DECLARE_DATA wodan_module = {
-    STANDARD20_MODULE_STUFF, 
-    wodan_create_dir_config,   /* create per-dir    config structures */
-    wodan_merge_config,        /* merge  per-dir    config structures */
-    wodan_create_server_config,/* create per-server config structures */
-    wodan_merge_config,        /* merge  per-server config structures */
-    wodan_commands,            /* table of config file commands       */
-    wodan_register_hooks       /* register hooks                      */
-};
-
-/* initialize Wodan */
-static int wodan_init_handler(apr_pool_t *p, 
-	apr_pool_t *plog UNUSED, 
-	apr_pool_t *ptemp UNUSED,
-	server_rec *s UNUSED)
-{
-	const char *identifier_string;
-	
-	identifier_string = apr_psprintf(p, "%s/%s", WODAN_NAME, WODAN_VERSION);
-	ap_add_version_component(p, identifier_string);
-	
-	return OK;
-}                          
+module AP_MODULE_DECLARE_DATA wodan_module;
 
 static void *wodan_create_config(apr_pool_t *p)
 {
@@ -155,32 +44,26 @@ static void *wodan_create_config(apr_pool_t *p)
 	return config;		
 }
 
-static void *wodan_create_server_config(apr_pool_t *p, 
-	server_rec *s UNUSED)
+static void *wodan_create_server_config(apr_pool_t *p, server_rec *s UNUSED)
 {
 	return wodan_create_config(p);
 }
 
-static void *wodan_create_dir_config(apr_pool_t *p, 
-	char *dir UNUSED)
+static void *wodan_create_dir_config(apr_pool_t *p, char *dir UNUSED)
 {
 	return wodan_create_config(p);
 }
 	          
-static void *wodan_merge_config(apr_pool_t *p, void *base_config_p, 
-	void *new_config_p)
+static void *wodan_merge_config(apr_pool_t *p, void *base_config_p, void *new_config_p)
 {
-	wodan_config_t *config = (wodan_config_t *)
-		apr_pcalloc(p, sizeof(wodan_config_t));
+	wodan_config_t *config      = (wodan_config_t *) apr_pcalloc(p, sizeof(wodan_config_t));
 	wodan_config_t *base_config = (wodan_config_t *) base_config_p;
-	wodan_config_t *new_config = (wodan_config_t *) new_config_p;
+	wodan_config_t *new_config  = (wodan_config_t *) new_config_p;
 	
 	if (strlen(new_config->cachedir) > 0) 
-		apr_cpystrn(config->cachedir, new_config->cachedir, 
-			MAX_CACHE_PATH_SIZE + 1);
+		apr_cpystrn(config->cachedir, new_config->cachedir, MAX_CACHE_PATH_SIZE + 1);
 	else 
-		apr_cpystrn(config->cachedir, base_config->cachedir,
-			MAX_CACHE_PATH_SIZE + 1);
+		apr_cpystrn(config->cachedir, base_config->cachedir, MAX_CACHE_PATH_SIZE + 1);
 	
 	config->cachedir_levels = new_config->cachedir_levels;
 	if (new_config->is_cachedir_set == 1 || base_config->is_cachedir_set == 1)
@@ -194,44 +77,30 @@ static void *wodan_merge_config(apr_pool_t *p, void *base_config_p,
 	else
 		config->backend_timeout = base_config->backend_timeout;
 		
-	config->proxy_passes = apr_array_append(p, 
-		base_config->proxy_passes, new_config->proxy_passes);
-	config->proxy_passes_reverse = apr_array_append(p,
-		base_config->proxy_passes_reverse, 
-		new_config->proxy_passes_reverse);
-	config->default_cachetimes = apr_array_append(p,
-		base_config->default_cachetimes, new_config->default_cachetimes);
-	config->default_cachetimes_regex = apr_array_append(p,
-		base_config->default_cachetimes_regex, 
-		new_config->default_cachetimes_regex);
-	config->default_cachetimes_header = apr_array_append(p,
-		base_config->default_cachetimes_header, 
-		new_config->default_cachetimes_header);
-	config->hash_headers = apr_array_append(p,
-		base_config->hash_headers, 
-		new_config->hash_headers);
-	config->hash_headers_match = apr_array_append(p,
-		base_config->hash_headers_match, 
-		new_config->hash_headers_match);
+	config->proxy_passes = apr_array_append(p, base_config->proxy_passes, new_config->proxy_passes);
+	config->proxy_passes_reverse = apr_array_append(p, base_config->proxy_passes_reverse, new_config->proxy_passes_reverse);
+	config->default_cachetimes = apr_array_append(p, base_config->default_cachetimes, new_config->default_cachetimes);
+	config->default_cachetimes_regex = apr_array_append(p, base_config->default_cachetimes_regex, new_config->default_cachetimes_regex);
+	config->default_cachetimes_header = apr_array_append(p, base_config->default_cachetimes_header, new_config->default_cachetimes_header);
+	config->hash_headers = apr_array_append(p, base_config->hash_headers, new_config->hash_headers);
+	config->hash_headers_match = apr_array_append(p, base_config->hash_headers_match, new_config->hash_headers_match);
 
 	return config;
 }               
-/* The sample content handler */
+
 
 static const char *add_pass(cmd_parms *cmd, void *dummy UNUSED, 
 	const char *path, const char *url)
 {
 	server_rec *s = cmd->server;
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(s->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
 	wodan_proxy_destination_t *proxy_destination;
 	char *proxy_url;
 	
 	if(path[0] != '/' || path[(int) strlen(path) - 1] != '/')
 	        return "First argument of WodanPass should be a dir e.g. /dir/";
 	if (strncasecmp(url, "http://", 7) != 0) 
-		return "Second argument of WodanPass should be a "
-			"http:// url, e.g. http://www.ic-s.nl";
+		return "Second argument of WodanPass should be a http:// url";
 	
 	proxy_url = apr_pstrdup(cmd->pool, url);
 	/* strip final '/' of proxy_url */
@@ -248,15 +117,13 @@ static const char *add_pass_reverse(cmd_parms *cmd,
 	void *dummy UNUSED, const char *path, const char *url)
 {
 	server_rec *s = cmd->server;
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(s->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
 	wodan_proxy_destination_t *proxy_alias;
 	
 	if(path[0] != '/' || path[(int) strlen(path) - 1] != '/')
 	        return "First argument of WodanPassReverse should be a dir e.g. /dir/";
 	if (strncasecmp(url, "http://", 7) != 0) 
-		return "Second argument of WodanPassReverse should be a "
-			"http:// url, e.g. http://www.ic-s.nl";
+		return "Second argument of WodanPassReverse should be a http:// url";
 	
 	proxy_alias = apr_array_push(config->proxy_passes_reverse);
 	proxy_alias->path = path;
@@ -268,26 +135,16 @@ static const char *add_cachedir(cmd_parms *cmd, void *dummy UNUSED,
 	const char *path)
 {
 	server_rec *s = cmd->server;
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(s->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
 	
 	/* prepend server root path */
 	const char *fname = ap_server_root_relative(cmd->pool, path);
 	
-	if (!ap_is_directory(cmd->pool, fname)) {
-		char *error_message = apr_psprintf(cmd->pool, 
-			"WodanCacheDir %s is not a directory!", fname);
-		return error_message;
-	}
+	if (!ap_is_directory(cmd->pool, fname))
+		return apr_psprintf(cmd->pool, "WodanCacheDir %s is not a directory!", fname);
 	
 	if (!util_file_is_writable(cmd->pool, fname))
-	{
-		
-		char *error_message = apr_psprintf(cmd->pool,
-			"WodanCachedir %s should be owned by Wodan user and should be writable!"
-			"by that user!", fname);
-		return error_message;
-	}
+		return apr_psprintf(cmd->pool, "WodanCachedir %s should be owned by Wodan user and should be writable by that user!", fname);
 	
 	apr_cpystrn(config->cachedir, fname, MAX_CACHE_PATH_SIZE + 1);
 	config->is_cachedir_set = 1;
@@ -295,28 +152,19 @@ static const char *add_cachedir(cmd_parms *cmd, void *dummy UNUSED,
 	return NULL;
 }	
 
-static const char *add_cachedir_levels(cmd_parms *cmd, 
-	void *dummy UNUSED, const char *level)
+static const char *add_cachedir_levels(cmd_parms *cmd, void *dummy UNUSED, const char *level)
 {
 	server_rec *s = cmd->server;
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(s->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
 	apr_int64_t levels;
 
-	if (!util_string_is_number(level)) {
-		char *error_message = apr_psprintf(cmd->pool, 
-			"Argument to WodanCacheDirLevels should be a number, it is %s now",
-			level);
-		return error_message;
-	}
+	if (!util_string_is_number(level))
+		return apr_psprintf(cmd->pool, "Argument to WodanCacheDirLevels should be a number, it is %s now", level);
 	
 	levels = apr_strtoi64(level, NULL, 10);
-	if (levels < 0 || levels > (apr_int64_t) MAX_CACHEDIR_LEVELS) {
-		char *error_message = apr_psprintf(cmd->pool, 
-			"WodanCacheDirLevels must have a value between 0 and %d",
-			(int) MAX_CACHEDIR_LEVELS);
-		return error_message;
-	}
+
+	if (levels < 0 || levels > (apr_int64_t) MAX_CACHEDIR_LEVELS)
+		return apr_psprintf(cmd->pool, "WodanCacheDirLevels must have a value between 0 and %d", (int) MAX_CACHEDIR_LEVELS);
 	
 	config->cachedir_levels = (int) levels;
 	return NULL;
@@ -326,21 +174,18 @@ static const char *add_default_cachetime(cmd_parms *cmd,
 	void *dummy UNUSED, const char *path, const char *time_string)
 {
 	server_rec *s = cmd->server;
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(s->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
 	wodan_default_cachetime_t *new_default_cachetime;
 	
-	if(path[0] != '/' || path[(int) strlen(path) - 1] != '/')
-		return "First argument of WodanDefaultCacheTime "
-	    		"should be a path, e.g. /dir/";
+	if (path[0] != '/' || path[(int) strlen(path) - 1] != '/')
+		return "First argument of WodanDefaultCacheTime should be a path, e.g. /dir/";
 	 
 	new_default_cachetime = apr_array_push(config->default_cachetimes);
 	new_default_cachetime->path = path;
 	if (strncmp(time_string, "no", 2 ) == 0 )
-		new_default_cachetime->cachetime = (apr_int32_t) -1;
+		new_default_cachetime->cachetime = (apr_int32_t)-1;
 	else { 
-	 	new_default_cachetime->cachetime = 
-	 		util_timestring_to_seconds(apr_pstrdup(cmd->pool, time_string));
+	 	new_default_cachetime->cachetime = util_timestring_to_seconds(apr_pstrdup(cmd->pool, time_string));
 	}
 	return NULL;
 }
@@ -350,34 +195,27 @@ static const char* add_default_cachetime_regex(cmd_parms *cmd,
 	const char *time_string)
 {
 	server_rec *s = cmd->server;
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(s->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
 	wodan_default_cachetime_regex_t *new_default_cachetime_regex;
 	ap_regex_t *compiled_pattern = NULL;
 
-	new_default_cachetime_regex = 
-		apr_array_push(config->default_cachetimes_regex);
+	new_default_cachetime_regex = apr_array_push(config->default_cachetimes_regex);
 	
-	compiled_pattern = ap_pregcomp(cmd->pool, regex_pattern, 
-		AP_REG_EXTENDED | AP_REG_NOSUB);
-	if (compiled_pattern == NULL) {
-		char *error_message = apr_psprintf(cmd->pool, 
-			"Failure compiling regex pattern \"%s\"", regex_pattern);
-		return error_message;
-	}	
+	compiled_pattern = ap_pregcomp(cmd->pool, regex_pattern, AP_REG_EXTENDED | AP_REG_NOSUB);
+	if (compiled_pattern == NULL)
+		return apr_psprintf(cmd->pool, "Failure compiling regex pattern \"%s\"", regex_pattern);
+
 	new_default_cachetime_regex->uri_pattern = compiled_pattern;
 	
 	if (strncmp(time_string, "no", 2) == 0)
 		new_default_cachetime_regex->cachetime = (apr_int32_t) -1;
 	else
-		new_default_cachetime_regex->cachetime = 
-			util_timestring_to_seconds(apr_pstrdup(cmd->pool, time_string));
+		new_default_cachetime_regex->cachetime = util_timestring_to_seconds(apr_pstrdup(cmd->pool, time_string));
 
 	return NULL;
 }
 
-static const char* add_hash_header(cmd_parms *cmd, 
-	void *dummy UNUSED, const char *headername)
+static const char* add_hash_header(cmd_parms *cmd, void *dummy UNUSED, const char *headername)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *) ap_get_module_config(s->module_config, &wodan_module);
@@ -396,11 +234,8 @@ static const char* add_hash_header_match(cmd_parms *cmd,
 	wodan_hash_header_match_t *directive;
 
 	compiled_pattern = ap_pregcomp(cmd->pool, regex_pattern, AP_REG_EXTENDED);
-	if (compiled_pattern == NULL) {
-		char *error_message = apr_psprintf(cmd->pool, 
-			"Failure compiling regex pattern \"%s\"", regex_pattern);
-		return error_message;
-	}	
+	if (compiled_pattern == NULL)
+		return apr_psprintf(cmd->pool, "Failure compiling regex pattern \"%s\"", regex_pattern);
 
 	directive = apr_array_push(config->hash_headers_match);
 	directive->header = apr_pstrdup(cmd->pool, headername);
@@ -415,37 +250,28 @@ static const char* add_default_cachetime_header(cmd_parms *cmd,
 	const char *regex_pattern, const char *time_string)
 {
 	server_rec *s = cmd->server;
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(s->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
 	wodan_default_cachetime_header_t *new_default_cachetime_header;
 	ap_regex_t *compiled_pattern;
 	
-	new_default_cachetime_header = 
-		apr_array_push(config->default_cachetimes_header);
-	
+	new_default_cachetime_header = apr_array_push(config->default_cachetimes_header);
 	new_default_cachetime_header->header = apr_pstrdup(cmd->pool, http_header);
-	compiled_pattern = ap_pregcomp(cmd->pool, regex_pattern, 
-		AP_REG_EXTENDED | AP_REG_NOSUB);
-	if (compiled_pattern == NULL) {
-		char *error_message = apr_psprintf(cmd->pool, 
-			"Failure compiling regex pattern \"%s\"", regex_pattern);
-		return error_message;
-	}
+	compiled_pattern = ap_pregcomp(cmd->pool, regex_pattern, AP_REG_EXTENDED | AP_REG_NOSUB);
+	if (compiled_pattern == NULL)
+		return apr_psprintf(cmd->pool, "Failure compiling regex pattern \"%s\"", regex_pattern);
+
 	new_default_cachetime_header->header_value_pattern = compiled_pattern;
 	if (strncmp(time_string, "no", 2) == 0) 
 		new_default_cachetime_header->cachetime = (apr_int32_t) -1;
 	else
-		new_default_cachetime_header->cachetime = 
-			util_timestring_to_seconds(apr_pstrdup(cmd->pool, time_string));
+		new_default_cachetime_header->cachetime = util_timestring_to_seconds(apr_pstrdup(cmd->pool, time_string));
 			
 	return NULL;
 }
 
-static const char* add_run_on_cache(cmd_parms *cmd, 
-	void *dummy UNUSED, int flag)
+static const char* add_run_on_cache(cmd_parms *cmd, void *dummy UNUSED, int flag)
 {
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(cmd->server->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(cmd->server->module_config, &wodan_module);
       
 	config->run_on_cache = (unsigned) flag;
 	
@@ -455,8 +281,7 @@ static const char* add_run_on_cache(cmd_parms *cmd,
 static const char *add_cache_404s(cmd_parms *cmd, 
 	void *dummy UNUSED, int flag)
 {
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(cmd->server->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(cmd->server->module_config, &wodan_module);
 	
 	config->cache_404s = (unsigned) flag;
 	
@@ -466,15 +291,12 @@ static const char *add_cache_404s(cmd_parms *cmd,
 static const char *add_backend_timeout(cmd_parms *cmd,
 	void *dummy UNUSED, const char *timeout_string)
 {
-	wodan_config_t *config = (wodan_config_t *)
-		ap_get_module_config(cmd->server->module_config, &wodan_module);
+	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(cmd->server->module_config, &wodan_module);
 	apr_int64_t timeout;
 	
-	if (!util_string_is_number(timeout_string)) {
-		char *error_message = apr_psprintf(cmd->pool,
-			"argument should be number, it is \"%s\" now", timeout_string);
-		return error_message;
-	}
+	if (!util_string_is_number(timeout_string))
+		return apr_psprintf(cmd->pool, "argument should be number, it is \"%s\" now", timeout_string);
+
 	timeout = apr_strtoi64(timeout_string, NULL, 10);
 	
 	// timeout is a number in milliseconds, so it needs to be multiplied by 1000
@@ -488,12 +310,41 @@ static const char *add_backend_timeout(cmd_parms *cmd,
 	return NULL;
 }
 
-static void wodan_register_hooks(apr_pool_t *p UNUSED)
+static wodan_proxy_destination_t* destination_longest_match(wodan_config_t *config, 
+	char *uri)
 {
-	ap_hook_post_config(wodan_init_handler, NULL, NULL, APR_HOOK_MIDDLE);
-	ap_hook_handler(wodan_handler, NULL, NULL, APR_HOOK_MIDDLE);
+	wodan_proxy_destination_t *longest, *list;
+	int length, i;
+
+	longest = NULL;
+	length = 0;
+	list = (wodan_proxy_destination_t *) config->proxy_passes->elts;
+	for(i=0; i < config->proxy_passes->nelts; i++)
+	{
+		int l = (int) strlen(list[i].path);
+
+		if(l > length && strncmp(list[i].path, uri, l) == 0)
+		{
+			longest = &list[i];
+			length = l;
+		}
+	}
+	return longest;	
 }
 
+
+static int wodan_init_handler(apr_pool_t *p, 
+	apr_pool_t *plog UNUSED, 
+	apr_pool_t *ptemp UNUSED,
+	server_rec *s UNUSED)
+{
+	const char *identifier_string;
+	
+	identifier_string = apr_psprintf(p, "%s/%s", WODAN_NAME, WODAN_VERSION);
+	ap_add_version_component(p, identifier_string);
+	
+	return OK;
+}
 static int wodan_handler(request_rec *r)
 {
 	wodan_config_t* config;
@@ -502,37 +353,29 @@ static int wodan_handler(request_rec *r)
 	int response = HTTP_BAD_GATEWAY;
 	apr_time_t cache_file_time;
 	
-	config = (wodan_config_t *)
-		ap_get_module_config(r->server->module_config, &wodan_module);
+	config = (wodan_config_t *)ap_get_module_config(r->server->module_config, &wodan_module);
 	
 	// TODO: check if is is perhaps a better idea to create a table of a certain size
 	memset(&httpresponse, 0, sizeof(httpresponse_t));
 	httpresponse.headers = apr_table_make(r->pool, 0);
 	
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-		     "Processing new request: %s%s", r->hostname, r->unparsed_uri);
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Processing new request: %s%s", r->hostname, r->unparsed_uri);
 
 	// see if the request can be handled from the cache.
 	cache_status = cache_get_status(config, r, &cache_file_time);
 
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-		     "Cache status: %d", cache_status);
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Cache status: %d", cache_status);
 
-	if (config->cache_404s) {
-		if (cache_status == WODAN_CACHE_404) {
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-			             r->server, "URL is cached as 404");
-			return HTTP_NOT_FOUND;
-		}
+	if ((config->cache_404s) && (cache_status == WODAN_CACHE_404)) {
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "URL is cached as 404");
+		return HTTP_NOT_FOUND;
 	}
 	
 	if (cache_status != WODAN_CACHE_PRESENT) {
 		/* attempt to get data from backend */
-		wodan_proxy_destination_t *proxy_destination =
-			destination_longest_match(config, r->unparsed_uri);
+		wodan_proxy_destination_t *proxy_destination = destination_longest_match(config, r->unparsed_uri);
 
-		if(proxy_destination != NULL)//FIXME what if destination is NULL
-		{
+		if(proxy_destination != NULL) { //FIXME what if destination is NULL
 			char* newpath;
 			int l = (int) strlen(proxy_destination->path);
 			newpath = &(r->unparsed_uri[l - 1]);
@@ -544,29 +387,20 @@ static int wodan_handler(request_rec *r)
 				     proxy_destination->url, newpath);
 			
 			//Get the httpresponse from remote server	
-			response = http_proxy(config, proxy_destination->url, newpath, 
-					      &httpresponse, r, cache_file_time);
+			response = http_proxy(config, proxy_destination->url, newpath, &httpresponse, r, cache_file_time);
 			/* If 404 are to be cached, then already return
 			 * default 404 page here in case of a 404. */
-			if (config->cache_404s)
-				if (response == HTTP_NOT_FOUND)
-					return HTTP_NOT_FOUND;
+			if ((config->cache_404s) && (response == HTTP_NOT_FOUND))
+				return HTTP_NOT_FOUND;
 
 			/* if nothing can be received from backend, and
 			   nothing in cache, NOT_FOUND is the only option
 			   left... */
-			if ((response == HTTP_NOT_FOUND || response == HTTP_BAD_GATEWAY ||
-					response == HTTP_GATEWAY_TIME_OUT) &&
-					cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
-			    	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			    		"return HTTP_NOT_FOUND");
+			if ((response == HTTP_NOT_FOUND || response == HTTP_BAD_GATEWAY || response == HTTP_GATEWAY_TIME_OUT) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
+			    	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "return HTTP_NOT_FOUND");
 			    	return HTTP_NOT_FOUND;
-			} else if (response != HTTP_BAD_GATEWAY &&
-				 response != HTTP_GATEWAY_TIME_OUT &&
-				 response != HTTP_NOT_MODIFIED) {
-				ap_log_error(APLOG_MARK, 
-					     APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-					     "Got response from gateway");
+			} else if (response != HTTP_BAD_GATEWAY && response != HTTP_GATEWAY_TIME_OUT && response != HTTP_NOT_MODIFIED) {
+				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Got response from gateway");
 			} 
 		}
 	}
@@ -574,10 +408,7 @@ static int wodan_handler(request_rec *r)
 	if (cache_status == WODAN_CACHE_PRESENT) {
 	  	cache_read_from_cache(config, r, &httpresponse);
 		apr_table_set(r->notes, "WodanSource", LOG_SOURCE_CACHED);
-	} else if (cache_status == WODAN_CACHE_PRESENT_EXPIRED &&
-		   (response == HTTP_BAD_GATEWAY || 
-		    response == HTTP_GATEWAY_TIME_OUT ||
-		    response == HTTP_NOT_MODIFIED)) {
+	} else if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (response == HTTP_BAD_GATEWAY || response == HTTP_GATEWAY_TIME_OUT || response == HTTP_NOT_MODIFIED)) {
 	  	cache_read_from_cache(config, r, &httpresponse);
 		cache_update_expiry_time(config, r);
 		apr_table_set(r->notes, "WodanSource", LOG_SOURCE_CACHED_BACKEND_ERROR);
@@ -586,12 +417,44 @@ static int wodan_handler(request_rec *r)
 	}
 
 	//Return some response code
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-		     "returning: %d",  httpresponse.response);
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "returning: %d",  httpresponse.response);
 	
 	return OK; 
 }
 
+static void wodan_register_hooks(apr_pool_t *p UNUSED)
+{
+	ap_hook_post_config(wodan_init_handler, NULL, NULL, APR_HOOK_MIDDLE);
+	ap_hook_handler(wodan_handler, NULL, NULL, APR_HOOK_MIDDLE);
+}
+
+static const command_rec wodan_commands[] = 
+{
+	AP_INIT_TAKE12("WodanPass", add_pass, NULL, RSRC_CONF, "A path and a URL"),
+	AP_INIT_TAKE12("WodanPassReverse", add_pass_reverse, NULL, RSRC_CONF, "A path and a URL"),
+	AP_INIT_TAKE1("WodanCacheDir", add_cachedir, NULL, RSRC_CONF, "A path"),
+	AP_INIT_TAKE1("WodanCacheDirLevels", add_cachedir_levels, NULL, RSRC_CONF, "A Number (> 0)"),
+	AP_INIT_TAKE2("WodanDefaultCacheTime", add_default_cachetime, NULL, RSRC_CONF, "A path and a time string"),
+	AP_INIT_TAKE2("WodanDefaultCacheTimeMatch", add_default_cachetime_regex, NULL, RSRC_CONF, "A regex pattern and a time string"),
+	AP_INIT_TAKE3("WodanDefaultCacheTimeHeaderMatch", add_default_cachetime_header, NULL, RSRC_CONF, "A header, a regex pattern and a time string"),
+	AP_INIT_TAKE1("WodanHashHeader", add_hash_header, NULL, RSRC_CONF, "A header to add to the hash"),
+	AP_INIT_TAKE23("WodanHashHeaderMatch", add_hash_header_match, NULL, RSRC_CONF, "A header to add to the hash if the regex pattern matches and an optional replacement pattern"),
+	AP_INIT_FLAG("WodanRunOnCache", add_run_on_cache, NULL, RSRC_CONF, "run completely on cache"),
+	AP_INIT_FLAG("WodanCache404s", add_cache_404s, NULL, RSRC_CONF, "cache 404 pages"),
+	AP_INIT_TAKE1("WodanBackendTimeout", add_backend_timeout, NULL, RSRC_CONF, "a number, which represents a time in miliseconds"),
+	{NULL}
+};
+
+
+module AP_MODULE_DECLARE_DATA wodan_module = {
+    STANDARD20_MODULE_STUFF, 
+    wodan_create_dir_config,   /* create per-dir    config structures */
+    wodan_merge_config,        /* merge  per-dir    config structures */
+    wodan_create_server_config,/* create per-server config structures */
+    wodan_merge_config,        /* merge  per-server config structures */
+    wodan_commands,            /* table of config file commands       */
+    wodan_register_hooks       /* register hooks                      */
+};
 
 
 
