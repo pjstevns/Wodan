@@ -159,8 +159,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 			ap_regex_t *exp = match[i].regex;
 			const char *rep = match[i].pattern;
 
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG,
-					0, r->server, "Lookup header [%s]", match[i].header);
+			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Lookup header [%s]", match[i].header);
 
 			const char *val, *value = apr_table_get(r->headers_in, key);
 
@@ -222,8 +221,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 	return 1;
 }
 
-WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, 
-		apr_time_t *cache_file_time)
+WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_time_t *cache_file_time)
 {
 	char* cachefilename;
 	apr_file_t *cachefile;
@@ -241,8 +239,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r,
 		return WODAN_CACHE_NOT_PRESENT;
 
 	get_cache_filename(config, r, &cachefilename);
-	if (apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool)
-			!= APR_SUCCESS) {
+	if (apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
 		return WODAN_CACHE_NOT_PRESENT;
 	}
 
@@ -258,8 +255,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r,
 
 		/* Parses a date in RFC 822  */
 		if ((cachefile_expire_time = apr_date_parse_http(buffer)) == APR_DATE_BAD) {
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server,
-					"Cachefile date not parsable. Returning \"Expired status\"");
+			ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "Cachefile date not parsable. Returning \"Expired status\"");
 			return WODAN_CACHE_PRESENT_EXPIRED;
 		}
 
@@ -644,22 +640,16 @@ static int write_preamble(apr_file_t *cachefile, request_rec *r,
 	apr_file_printf(cachefile, "%s%s", expire_time_string, CRLF);
 	apr_file_printf(cachefile, "%d%s", httpresponse->response, CRLF);
 	/* TODO add error checking */
-	//Write headers
 	{
 		int i;
 		const apr_array_header_t *headers_array = apr_table_elts(httpresponse->headers);
 		apr_table_entry_t *headers_elts = (apr_table_entry_t *) headers_array->elts;
 		
-		for(i = 0; i < headers_array->nelts; i++)
-	        {
-			apr_file_printf(cachefile, "%s: %s%s", headers_elts[i].key, 
-				headers_elts[i].val, CRLF);
-			/* TODO add error checking */
+		for(i = 0; i < headers_array->nelts; i++) {
+			apr_file_printf(cachefile, "%s: %s%s", headers_elts[i].key, headers_elts[i].val, CRLF);
 		}
 	}
-	//Write end of headers line
 	apr_file_printf(cachefile, "%s", CRLF);
-	/* TODO add  eror checking */
 	return 0;
 }
 
@@ -673,44 +663,37 @@ apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
 	char *temp_dir;	
 	
 	if(!is_cachedir_set(config)) {
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-		     r->server, "%s: cachedir not set.", __func__);
-
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "%s: cachedir not set.", __func__);
 		return NULL;
 	}
 
-	if (r->method_number != M_GET ||
-	    r->header_only ||
-	    !is_response_cacheable(httpresponse->response, 
-				   config->cache_404s)) {
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0,
-			     r->server, "Response isn't cacheable");
+	if (r->method_number != M_GET || r->header_only || !is_response_cacheable(httpresponse->response, config->cache_404s)) {
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "Response isn't cacheable");
 		return NULL;
 	}
 	
 	if ((char *) ap_strcasestr(r->unparsed_uri, "cache=no") != NULL)
 		return NULL;
-	if ((expire = get_expire_time(config, r, httpresponse,
-				      &expire_interval)) == NULL)
+
+	if ((expire = get_expire_time(config, r, httpresponse, &expire_interval)) == NULL)
 		return NULL;
 	
 	if (apr_temp_dir_get((const char **) &temp_dir, r->pool) != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0,
-			r->server, "unable to find temp dir");
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "unable to find temp dir");
 		return NULL;
 	}
+
 	tempfile_template = apr_psprintf(r->pool, "%s/wodan_temp_XXXXXX", temp_dir);
 	if (apr_file_mktemp(&cache_file, tempfile_template, 0, r->pool) != APR_SUCCESS)
 		return NULL;
 	
 	/* write url, expire, cache constraint and headers */
-	if (write_preamble(cache_file, r, httpresponse, expire,
-			   expire_interval) == -1) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-			     "error writing preamble to tempcachefile");
+	if (write_preamble(cache_file, r, httpresponse, expire, expire_interval) == -1) {
+		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "error writing preamble to tempcachefile");
 		apr_file_close(cache_file);
 		return NULL;
 	}
+		
 	return cache_file;
 }
 

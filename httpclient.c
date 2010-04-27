@@ -366,7 +366,7 @@ static int receive_complete_response(wodan_config_t *config,
 			// flush content to client
 			apr_file_flush(cache_file);
 		}
-			return HTTP_NOT_FOUND;
+		return HTTP_NOT_FOUND;
 	}
 	if (status == HTTP_NOT_MODIFIED) { /* = 304 */
 		return status;
@@ -376,10 +376,16 @@ static int receive_complete_response(wodan_config_t *config,
 		return receive_headers_result;
 		
 	
-	if (status == HTTP_OK) {
-		cache_file = cache_get_cachefile(config, r, httpresponse);
-	} else {
-		cache_file = (apr_file_t *)NULL;
+	switch(status) {
+		case HTTP_OK:
+		case HTTP_MOVED_PERMANENTLY:
+		case HTTP_MOVED_TEMPORARILY:
+		case HTTP_SEE_OTHER:
+			cache_file = cache_get_cachefile(config, r, httpresponse);
+			break;
+		default:
+			cache_file = (apr_file_t *)NULL;
+			break;
 	}
 
 	adjust_headers_for_sending(config, r, httpresponse);

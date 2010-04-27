@@ -222,14 +222,13 @@ const char* wodan_location_reverse_map(wodan_proxy_alias_t* alias, const char *u
 	
 	url_len = strlen(url);
 	alias_len = strlen(alias->alias);
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-		"Replacing %s with %s", url, alias->alias);
-	if (url_len >= alias_len && 
-		strncmp(alias->alias, url, alias_len) == 0) {
-		char *constructed_url;
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Replacing");
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Replacing %s with %s", url, alias->alias);
+	if (url_len >= alias_len && strncmp(alias->alias, url, alias_len) == 0) {
+		char *constructed_url, *result;
 		constructed_url = apr_pstrcat(r->pool, alias->path, &url[alias_len], NULL);
-		return ap_construct_url(r->pool, constructed_url, r);
+		result = ap_construct_url(r->pool, constructed_url, r);
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Replacing with %s", result);
+		return (const char *)result;
 	}
 	else return url;
 
