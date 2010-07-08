@@ -127,7 +127,6 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 	apr_array_header_t *headers;
 
 	apr_sha1_init(&sha);
-	apr_sha1_update(&sha, r->hostname, strlen(r->hostname));
 	apr_sha1_update(&sha, r->unparsed_uri, strlen(r->unparsed_uri));
 
 	/* handle WodanHashHeader directives */
@@ -218,6 +217,8 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 	*ptr = '\0';
 
 	*filename = ap_make_full_path(r->pool, dir, checksum);
+
+	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "%s: use cachefile: %s", __func__, *filename);
 	return 1;
 }
 
