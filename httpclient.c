@@ -294,12 +294,9 @@ static int send_headers(apr_socket_t *socket,
 		   !strncasecmp(headers_elts[i].key, "Keep-Alive", 10) || 
 		   !strncasecmp(headers_elts[i].key, "TE", 2) || 
 		   !strncasecmp(headers_elts[i].key, "Trailer", 7) || 
-		   !strncasecmp(headers_elts[i].key, 
-			       "Transfer-Encoding", 17) || 
-		   !strncasecmp(headers_elts[i].key, 
-			       "Proxy-Authorization", 19) ||
-		   !strncasecmp(headers_elts[i].key,
-			       "If-Modified-Since", 17) ||
+		   !strncasecmp(headers_elts[i].key, "Transfer-Encoding", 17) || 
+		   !strncasecmp(headers_elts[i].key, "Proxy-Authorization", 19) ||
+		   !strncasecmp(headers_elts[i].key, "If-Modified-Since", 17) ||
 		   !strncasecmp(headers_elts[i].key, "Cache-Control", 12) ||
 		   !strncasecmp(headers_elts[i].key, "If-None-Match", 12))
 		{
@@ -368,9 +365,10 @@ static int receive_complete_response(wodan_config_t *config,
 		}
 		return HTTP_NOT_FOUND;
 	}
-	if (status == HTTP_NOT_MODIFIED) { /* = 304 */
+	if (status == HTTP_NOT_MODIFIED) /* = 304 */
 		return status;
-	}
+	if (ap_is_HTTP_SERVER_ERROR(status)) /* = 50x */
+		return status;
 	
 	if ((receive_headers_result = receive_headers(socket, r, httpresponse)) != OK) 
 		return receive_headers_result;
@@ -671,6 +669,7 @@ int http_proxy (wodan_config_t *config, const char* proxyurl, char* uri,
 	/* send request */
 	if (send_complete_request(socket, r, dest_host_and_port, destpath, out_headers, cache_file_time) == -1) {
 		apr_socket_close(socket);
+		httpresponse->response = HTTP_BAD_GATEWAY;
 		return HTTP_BAD_GATEWAY;
 	}	
 	

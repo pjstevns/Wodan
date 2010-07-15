@@ -137,9 +137,7 @@ apr_int32_t util_timestring_to_seconds(char *string)
 char* util_skipspaces (char* input)
 {
 	while(*input == ' ')
-	{
 		input++;
-	}
 	return input;
 }
 

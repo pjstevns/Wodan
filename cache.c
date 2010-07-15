@@ -277,8 +277,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 		if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 			status = atoi(buffer);
 			if (status == HTTP_NOT_FOUND) {
-				ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0,
-						r->server, "File in cache has status 404");
+				ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "File in cache has status 404");
 				apr_file_close(cachefile);
 				return WODAN_CACHE_404;
 			}

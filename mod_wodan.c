@@ -396,19 +396,19 @@ static int wodan_handler(request_rec *r)
 			/* if nothing can be received from backend, and
 			   nothing in cache, NOT_FOUND is the only option
 			   left... */
-			if ((response == HTTP_NOT_FOUND || response == HTTP_BAD_GATEWAY || response == HTTP_GATEWAY_TIME_OUT) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
-			    	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "return HTTP_NOT_FOUND");
+			if (ap_is_HTTP_SERVER_ERROR(response) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
+				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "returning: %d", HTTP_NOT_FOUND);
 			    	return HTTP_NOT_FOUND;
-			} else if (response != HTTP_BAD_GATEWAY && response != HTTP_GATEWAY_TIME_OUT && response != HTTP_NOT_MODIFIED) {
-				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Got response from gateway");
 			} 
+
+			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Got response from gateway: %d", httpresponse.response);
 		}
 	}
 
 	if (cache_status == WODAN_CACHE_PRESENT) {
 	  	cache_read_from_cache(config, r, &httpresponse);
 		apr_table_set(r->notes, "WodanSource", LOG_SOURCE_CACHED);
-	} else if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (response == HTTP_BAD_GATEWAY || response == HTTP_GATEWAY_TIME_OUT || response == HTTP_NOT_MODIFIED)) {
+	} else if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(response) || response == HTTP_NOT_MODIFIED)) {
 	  	cache_read_from_cache(config, r, &httpresponse);
 		cache_update_expiry_time(config, r);
 		apr_table_set(r->notes, "WodanSource", LOG_SOURCE_CACHED_BACKEND_ERROR);
