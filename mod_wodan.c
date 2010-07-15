@@ -347,10 +347,10 @@ static int wodan_init_handler(apr_pool_t *p,
 }
 static int wodan_handler(request_rec *r)
 {
+	int response = HTTP_BAD_GATEWAY;
 	wodan_config_t* config;
 	httpresponse_t httpresponse;
 	WodanCacheStatus_t cache_status;
-	int response = HTTP_BAD_GATEWAY;
 	apr_time_t cache_file_time;
 	
 	config = (wodan_config_t *)ap_get_module_config(r->server->module_config, &wodan_module);
@@ -396,7 +396,7 @@ static int wodan_handler(request_rec *r)
 			/* if nothing can be received from backend, and
 			   nothing in cache, NOT_FOUND is the only option
 			   left... */
-			if (ap_is_HTTP_SERVER_ERROR(response) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
+			if ((response == HTTP_NOT_FOUND || ap_is_HTTP_SERVER_ERROR(response)) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
 				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "returning: %d", HTTP_NOT_FOUND);
 			    	return HTTP_NOT_FOUND;
 			} 

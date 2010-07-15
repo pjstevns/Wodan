@@ -21,25 +21,6 @@
 #include <string.h>
 
 /**
- * get all parts of the backend url
- * @param[in] pool pointer to memory pool
- * @param[in] proxyurl the complete destination url
- * @param[in] uri the requested uri
- * @param[out] desthost destination host
- * @param[out] destport destination port
- * @param[out] destpath destination path
- * @param[out] dest_host_and_port host:port (e.g. www.ic-s.nl:80)
- * @param[out] do_ssl will be set to one if we need to do ssl to
- *             the backend.
- */
-static apr_status_t get_destination_parts(apr_pool_t *p,
-				 const char *proxy_url, const char *uri,
-				 char **dest_host,
-				 int *dest_port, char **dest_path,
-				 char **dest_host_and_port,
-				 int *do_ssl);
-
-/**
  * send request line and Host header
  * @param connection connection struct
  * @param r request record
@@ -51,21 +32,7 @@ static int send_request(apr_socket_t *socket,
 			request_rec *r, const char *dest_host,
 			const char *dest_path, apr_time_t modified_time);
 
-/**
- * send request body
- * @param connection connection struct
- * @param r request record
- */
-static int send_request_body(apr_socket_t *socket,
-			request_rec *r);
 
-/**
- * add X-headers to table.
- * @param r request_rec
- * @param out_headers_to_backend table of headers to send to the backend.
- */
-static void add_x_headers(const request_rec *r,
-			  apr_table_t *out_headers_to_backend);
 
 /**
  * send headers to client. Also sends the empty newline after headers.
@@ -78,31 +45,6 @@ static void add_x_headers(const request_rec *r,
 static int send_headers(apr_socket_t *socket, 
 			 const request_rec *r, const apr_table_t *headers);
 
-/**
- * does a request for a url to the backend.
- * @param connection connection struct
- * @param r request_rec
- * @param dest_host destination host
- * @param dest_path destination path
- * @param out_headers headers sent to backend
- * @param modified_time last modified time in cache
- */
-static int send_complete_request(apr_socket_t *socket,
-			  request_rec *r,
-			  const char *dest_host,
-			  const char *dest_path,
-			  apr_table_t *out_headers,
-			  apr_time_t modified_time);
-
-/** receive the whole response from the backend 
- * @param connection connection to backend
- * @param r request_rec
- * @param httpresponse will hold response
- * @return OK if finished
- */
-static int receive_complete_response(wodan_config_t *config,
-	apr_socket_t *socket, request_rec *r,  
-	httpresponse_t *httpresponse);
 
 /** receive status line from backend
  * @param connection connection to backend
@@ -122,8 +64,6 @@ static int receive_headers(apr_socket_t *socket, request_rec *r,
 /** receive the body of the response from the backend */
 static int receive_body(wodan_config_t *config, apr_socket_t *socket, 
 	request_rec *r, httpresponse_t *httpresponse, apr_file_t *cache_file);
-/** adjust dates to one form */
-static void adjust_dates(request_rec *r, struct httpresponse *httpresponse);
 
 /**
  * Remove all connection based header from the table
@@ -160,6 +100,19 @@ static void ap_reverseproxy_clear_connection(apr_pool_t *p, apr_table_t *headers
     apr_table_unset(headers,"Transfer-Encoding");
     apr_table_unset(headers,"Upgrade");
 }    
+
+/**
+ * get all parts of the backend url
+ * @param[in] pool pointer to memory pool
+ * @param[in] proxyurl the complete destination url
+ * @param[in] uri the requested uri
+ * @param[out] desthost destination host
+ * @param[out] destport destination port
+ * @param[out] destpath destination path
+ * @param[out] dest_host_and_port host:port (e.g. www.ic-s.nl:80)
+ * @param[out] do_ssl will be set to one if we need to do ssl to
+ *             the backend.
+ */
 
 static apr_status_t get_destination_parts(apr_pool_t *p,
 			  const char *proxy_url, const char *uri,
@@ -202,6 +155,75 @@ static apr_status_t get_destination_parts(apr_pool_t *p,
 	*dest_host_and_port = apr_psprintf(p, "%s:%d", *dest_host, *dest_port);
 	return APR_SUCCESS;
 }
+
+/**
+ * send request body
+ * @param connection connection struct
+ * @param r request record
+ */
+
+static int send_request_body(apr_socket_t *socket, request_rec *r)
+{
+	int result;
+
+	if ((result = ap_setup_client_block(r, REQUEST_CHUNKED_ERROR)))
+		return result;
+	
+	if (ap_should_client_block(r)) {
+		int nr_bytes_read;
+		char buffer[BUFFERSIZE];
+
+		while ((nr_bytes_read = 
+			ap_get_client_block(r, buffer, BUFFERSIZE)) > 0) { 
+			if (connection_write_bytes(socket, r,
+						   buffer,
+						   nr_bytes_read) == -1) 
+				return -1;
+		}
+	}
+	return OK;
+}
+
+/**
+ * add X-headers to table.
+ * @param r request_rec
+ * @param out_headers_to_backend table of headers to send to the backend.
+ */
+
+static void add_x_headers(const request_rec *r,
+		   apr_table_t *out_headers_to_backend)
+{
+	const char *temp;
+
+	/* Add X-Forwarded-For so the backend can find out where the 
+	 * request came from. If there's already a X-Forwarded-For
+	 * header, the remote_ip is added to that header */
+	apr_table_mergen(out_headers_to_backend, "X-Forwarded-For",
+			r->connection->remote_ip);
+	/* With X-Forwarded-Host, the backend can determine the original
+	 * Host: header send to Wodan */
+	if ((temp = apr_table_get(r->headers_in, "Host"))) 
+		apr_table_mergen(out_headers_to_backend, "X-Forwarded-Host",
+				temp);
+	/* Add this server (the server Wodan runs on) as the X-Forwarded-Server,
+	   The backend can determine the frontend servername by this. */
+	apr_table_mergen(out_headers_to_backend, "X-Forwarded-Server",
+			r->server->server_hostname);
+	/* Pass the protocol used for client<->wodan communication through
+	 * to the backend. */
+	apr_table_set(out_headers_to_backend, "X-Wodan-Protocol", r->protocol);
+}
+
+
+/**
+ * does a request for a url to the backend.
+ * @param connection connection struct
+ * @param r request_rec
+ * @param dest_host destination host
+ * @param dest_path destination path
+ * @param out_headers headers sent to backend
+ * @param modified_time last modified time in cache
+ */
 
 static int send_complete_request(apr_socket_t *socket, request_rec *r, 
 		const char *dest_host_and_port, const char *dest_path, apr_table_t *out_headers,
@@ -252,30 +274,6 @@ static int send_request(apr_socket_t *socket, request_rec *r,
 	return OK;
 }
 
-static void add_x_headers(const request_rec *r,
-		   apr_table_t *out_headers_to_backend)
-{
-	const char *temp;
-
-	/* Add X-Forwarded-For so the backend can find out where the 
-	 * request came from. If there's already a X-Forwarded-For
-	 * header, the remote_ip is added to that header */
-	apr_table_mergen(out_headers_to_backend, "X-Forwarded-For",
-			r->connection->remote_ip);
-	/* With X-Forwarded-Host, the backend can determine the original
-	 * Host: header send to Wodan */
-	if ((temp = apr_table_get(r->headers_in, "Host"))) 
-		apr_table_mergen(out_headers_to_backend, "X-Forwarded-Host",
-				temp);
-	/* Add this server (the server Wodan runs on) as the X-Forwarded-Server,
-	   The backend can determine the frontend servername by this. */
-	apr_table_mergen(out_headers_to_backend, "X-Forwarded-Server",
-			r->server->server_hostname);
-	/* Pass the protocol used for client<->wodan communication through
-	 * to the backend. */
-	apr_table_set(out_headers_to_backend, "X-Wodan-Protocol", r->protocol);
-}
-
 static int send_headers(apr_socket_t *socket, 
 		  const request_rec *r, const apr_table_t *headers) 
 {
@@ -318,29 +316,13 @@ static int send_headers(apr_socket_t *socket,
 
 	return OK;
 }
-
-static int send_request_body(apr_socket_t *socket, request_rec *r)
-{
-	int result;
-
-	if ((result = ap_setup_client_block(r, REQUEST_CHUNKED_ERROR)))
-		return result;
-	
-	if (ap_should_client_block(r)) {
-		int nr_bytes_read;
-		char buffer[BUFFERSIZE];
-
-		while ((nr_bytes_read = 
-			ap_get_client_block(r, buffer, BUFFERSIZE)) > 0) { 
-			if (connection_write_bytes(socket, r,
-						   buffer,
-						   nr_bytes_read) == -1) 
-				return -1;
-		}
-	}
-	return OK;
-}
        
+/** receive the whole response from the backend 
+ * @param connection connection to backend
+ * @param r request_rec
+ * @param httpresponse will hold response
+ * @return OK if finished
+ */
 static int receive_complete_response(wodan_config_t *config, 
 	apr_socket_t *socket, request_rec *r, 
 	httpresponse_t *httpresponse) 
@@ -408,8 +390,7 @@ static int receive_status_line(apr_socket_t *socket, request_rec *r,
 	http_string = ap_getword_white(r->pool, &read_string);
 	status_string = ap_getword_white(r->pool, &read_string);
 	
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0,
-		     r->server, "statusstr = %s", status_string);
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "statusstr = %s", status_string);
 
 	status = atoi(status_string);
 	
@@ -417,6 +398,23 @@ static int receive_status_line(apr_socket_t *socket, request_rec *r,
 
 	return status;
 }
+
+/** adjust dates to one form */
+static void adjust_dates(request_rec *r, struct httpresponse *httpresponse) 
+{
+	const char* datestr = NULL;
+	if ((datestr = apr_table_get(httpresponse->headers, "Date")) != NULL)
+		apr_table_set(httpresponse->headers, "Date", 
+			wodan_date_canon(r->pool, datestr));
+	if ((datestr = apr_table_get(httpresponse->headers, "Last-Modified")) 
+	    != NULL)
+		apr_table_set(httpresponse->headers, "Last-Modified", 
+			wodan_date_canon(r->pool, datestr));
+	if ((datestr = apr_table_get(httpresponse->headers, "Expires")) != NULL)
+		apr_table_set(httpresponse->headers, "Expires",
+			wodan_date_canon(r->pool, datestr));
+}
+
 
 static int receive_headers(apr_socket_t *socket, request_rec *r,
 		    struct httpresponse *httpresponse)
@@ -580,22 +578,6 @@ static int receive_body(wodan_config_t *config, apr_socket_t *socket,
 
 	return OK;
 }
-
-static void adjust_dates(request_rec *r, struct httpresponse *httpresponse) 
-{
-	const char* datestr = NULL;
-	if ((datestr = apr_table_get(httpresponse->headers, "Date")) != NULL)
-		apr_table_set(httpresponse->headers, "Date", 
-			wodan_date_canon(r->pool, datestr));
-	if ((datestr = apr_table_get(httpresponse->headers, "Last-Modified")) 
-	    != NULL)
-		apr_table_set(httpresponse->headers, "Last-Modified", 
-			wodan_date_canon(r->pool, datestr));
-	if ((datestr = apr_table_get(httpresponse->headers, "Expires")) != NULL)
-		apr_table_set(httpresponse->headers, "Expires",
-			wodan_date_canon(r->pool, datestr));
-}
-
 static apr_socket_t* connection_open (wodan_config_t *config, char* host, int port, request_rec *r, int do_ssl UNUSED)
 {
 	apr_socket_t *socket;

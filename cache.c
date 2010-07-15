@@ -304,7 +304,6 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r,
 	apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool);
 	/* Read url field, but we don't do anything with it */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
-
 	/* same for expire interval field */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
 	/* same for expire field */
@@ -329,7 +328,7 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r,
 		key = ap_getword(r->pool, (const char**) &bufferpointer, ':');
 		bufferpointer = util_skipspaces(bufferpointer);
 		while(bufferpointer[counter]) {
-			if(bufferpointer[counter] == CR || bufferpointer[counter] == LF || bufferpointer[counter] == '\n') {
+			if(bufferpointer[counter] == CR || bufferpointer[counter] == LF ) {
 				bufferpointer[counter] = '\0';
 				break;
 			}
