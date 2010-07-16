@@ -228,7 +228,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 	apr_file_t *cachefile;
 	char buffer[BUFFERSIZE];
 	int status;
-	int interval_time;
+	int interval_time = 0;
 
 	*cache_file_time = (apr_time_t) 0;
 
@@ -239,18 +239,20 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 	if (!is_cachedir_set(config))
 		return WODAN_CACHE_NOT_PRESENT;
 
-	get_cache_filename(config, r, &cachefilename);
+	if (! get_cache_filename(config, r, &cachefilename))
+		return WODAN_CACHE_NOT_CACHEABLE;
+
 	if (apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
 		return WODAN_CACHE_NOT_PRESENT;
 	}
 
 	/* Read url field, but we don't do anything with it */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
-	/* read expire interval field, but don't do anything with it */
-	interval_time = 0;
-	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
+
+	/* read expire interval field */
+	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS)
 		interval_time = atoi(buffer);
-	}
+
 	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 		apr_time_t cachefile_expire_time;
 
@@ -266,8 +268,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
 				"Cachefile TTL (%ld)", ((long int) cachefile_expire_time - (long int) r->request_time)/1000000);
 
-		if((r->request_time > cachefile_expire_time) && (!config->run_on_cache))
-		{
+		if((r->request_time > cachefile_expire_time) && (!config->run_on_cache)) {
 			apr_file_close(cachefile);
 			return WODAN_CACHE_PRESENT_EXPIRED;
 		}
@@ -290,8 +291,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 	return WODAN_CACHE_NOT_PRESENT;
 }
 
-int cache_read_from_cache (wodan_config_t *config, request_rec *r,
-	struct httpresponse* httpresponse)
+int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpresponse* httpresponse)
 {
 	char* cachefilename;
 	apr_file_t *cachefile;
@@ -300,7 +300,9 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r,
 	int content_length = 0;
 	int body_bytes_written = 0;
 	
-	get_cache_filename(config, r, &cachefilename);
+	if (get_cache_filename(config, r, &cachefilename))
+		return 0;
+
 	apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool);
 	/* Read url field, but we don't do anything with it */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
@@ -601,13 +603,15 @@ static apr_file_t *open_cachefile(wodan_config_t *config, request_rec *r)
 	int result;
 	struct stat dir_status;
 
-	get_cache_filename(config, r, &cachefilename);	
+	if (! get_cache_filename(config, r, &cachefilename))
+		return NULL;
+
 	for (i = 0; i < config->cachedir_levels; i++) {
 		subdir = get_cache_file_subdir(config, r, cachefilename, i);
 		
 		result = stat( subdir, &dir_status );
-		if ( ( result != 0 ) || ( ! S_ISDIR( dir_status.st_mode ) ) )
-			mkdir( subdir, 0770 );
+		if ((result != 0) || (! S_ISDIR(dir_status.st_mode)))
+			mkdir(subdir, 0770);
 	}
 
 	apr_file_open(&cachefile, cachefilename, 
@@ -744,7 +748,8 @@ int cache_update_expiry_time(wodan_config_t *config, request_rec *r)
 	char buffer[BUFFERSIZE];
 	apr_size_t bytes_written;
 
-	get_cache_filename(config, r, &cachefilename);
+	if (! get_cache_filename(config, r, &cachefilename))
+		return -1;
 
 	if (apr_file_open(&cachefile, cachefilename, APR_READ|APR_WRITE, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) 
 		return -1;   
