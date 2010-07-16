@@ -352,13 +352,13 @@ static int wodan_handler(request_rec *r)
 	httpresponse_t httpresponse;
 	WodanCacheStatus_t cache_status;
 	apr_time_t cache_file_time;
+	wodan_proxy_destination_t *proxy_destination;
 	
 	config = (wodan_config_t *)ap_get_module_config(r->server->module_config, &wodan_module);
 	
-	// TODO: check if is is perhaps a better idea to create a table of a certain size
-	memset(&httpresponse, 0, sizeof(httpresponse_t));
-	httpresponse.headers = apr_table_make(r->pool, 0);
-	
+	if (! (proxy_destination = destination_longest_match(config, r->unparsed_uri)))
+		return DECLINED;
+
 	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Processing new request: %s%s", r->hostname, r->unparsed_uri);
 
 	// see if the request can be handled from the cache.
@@ -371,38 +371,37 @@ static int wodan_handler(request_rec *r)
 		return HTTP_NOT_FOUND;
 	}
 	
+	memset(&httpresponse, 0, sizeof(httpresponse_t));
+	httpresponse.headers = apr_table_make(r->pool, 0);
+
 	if (cache_status != WODAN_CACHE_PRESENT) {
 		/* attempt to get data from backend */
-		wodan_proxy_destination_t *proxy_destination = destination_longest_match(config, r->unparsed_uri);
 
-		if(proxy_destination != NULL) { //FIXME what if destination is NULL
-			char* newpath;
-			int l = (int) strlen(proxy_destination->path);
-			newpath = &(r->unparsed_uri[l - 1]);
-			
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-				     r->server, 
-				     "No cache, getting content from remote "
-				     "url: %s path: %s", 
-				     proxy_destination->url, newpath);
-			
-			//Get the httpresponse from remote server	
-			response = http_proxy(config, proxy_destination->url, newpath, &httpresponse, r, cache_file_time);
-			/* If 404 are to be cached, then already return
-			 * default 404 page here in case of a 404. */
-			if ((config->cache_404s) && (response == HTTP_NOT_FOUND))
-				return HTTP_NOT_FOUND;
+		char* newpath;
+		int l = (int) strlen(proxy_destination->path);
+		newpath = &(r->unparsed_uri[l - 1]);
 
-			/* if nothing can be received from backend, and
-			   nothing in cache, NOT_FOUND is the only option
-			   left... */
-			if ((response == HTTP_NOT_FOUND || ap_is_HTTP_SERVER_ERROR(response)) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
-				ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "returning: %d", HTTP_NOT_FOUND);
-			    	return HTTP_NOT_FOUND;
-			} 
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
+				"No cache, getting content from remote "
+				"url: %s path: %s", 
+				proxy_destination->url, newpath);
 
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Got response from gateway: %d", httpresponse.response);
-		}
+		//Get the httpresponse from remote server	
+		response = http_proxy(config, proxy_destination->url, newpath, &httpresponse, r, cache_file_time);
+		/* If 404 are to be cached, then already return
+		 * default 404 page here in case of a 404. */
+		if ((config->cache_404s) && (response == HTTP_NOT_FOUND))
+			return HTTP_NOT_FOUND;
+
+		/* if nothing can be received from backend, and there's
+		   nothing in cache, return the response code so
+		   ErrorDocument can handle it ... */
+		if ((response == HTTP_NOT_FOUND || ap_is_HTTP_SERVER_ERROR(response)) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
+			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "returning: %d", response);
+			return response;
+		} 
+
+		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Got response from gateway: %d", httpresponse.response);
 	}
 
 	if (cache_status == WODAN_CACHE_PRESENT) {
