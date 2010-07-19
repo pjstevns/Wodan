@@ -336,19 +336,12 @@ static int receive_complete_response(wodan_config_t *config,
 		return HTTP_BAD_GATEWAY;
 	
 	if (status == HTTP_NOT_FOUND) {
-		if (config->cache_404s) {
-			/* We have to duplicate the cache_get_cachefile call
-			 * because it writes headers, and we don't want any
-			 * headers in a 404 file. It only wastes space. */
-			cache_file = cache_get_cachefile(config, r, httpresponse);
-			cache_close_cachefile(config, r, cache_file);
-			// flush content to client
-			apr_file_flush(cache_file);
-		}
-		return HTTP_NOT_FOUND;
+		if (! config->cache_404s)
+			return status; /* = 404 */
 	}
 	if (status == HTTP_NOT_MODIFIED) /* = 304 */
 		return status;
+
 	if (ap_is_HTTP_SERVER_ERROR(status)) /* = 50x */
 		return status;
 	
@@ -358,6 +351,7 @@ static int receive_complete_response(wodan_config_t *config,
 	
 	switch(status) {
 		case HTTP_OK:
+		case HTTP_NOT_FOUND: 
 		case HTTP_MOVED_PERMANENTLY:
 		case HTTP_MOVED_TEMPORARILY:
 		case HTTP_SEE_OTHER:

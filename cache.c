@@ -20,6 +20,13 @@
 
 #include <string.h>
 
+typedef struct {
+	char *url;
+	int ttl;
+	apr_time_t expire;
+	int status;
+} WodanCacheHeader_T;
+
 /**
  * \brief check if the CacheDir directive is set
  * \param config the server configuration
@@ -229,6 +236,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 	char buffer[BUFFERSIZE];
 	int status;
 	int interval_time = 0;
+	long int ttl;
 
 	*cache_file_time = (apr_time_t) 0;
 
@@ -264,21 +272,24 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 
 		/* time - interval_time = time that file was created */
 		*cache_file_time = cachefile_expire_time - apr_time_from_sec(interval_time);
-
+		ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
 		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-				"Cachefile TTL (%ld)", ((long int) cachefile_expire_time - (long int) r->request_time)/1000000);
+				"ttl [%ld]", ttl);
 
-		if((r->request_time > cachefile_expire_time) && (!config->run_on_cache)) {
+		if((ttl <= 0) && (!config->run_on_cache)) {
 			apr_file_close(cachefile);
 			return WODAN_CACHE_PRESENT_EXPIRED;
 		}
 
-		/* Read empty line before status line */
-		apr_file_gets(buffer, BUFFERSIZE, cachefile);
 		if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 			status = atoi(buffer);
 			if (status == HTTP_NOT_FOUND) {
-				ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "File in cache has status 404");
+				ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "status [404]");
+				if (! config->cache_404s) {
+					const char *fname;
+					apr_file_name_get(&fname, cachefile);
+					apr_file_remove(fname, r->pool);
+				}
 				apr_file_close(cachefile);
 				return WODAN_CACHE_404;
 			}
@@ -300,7 +311,7 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpre
 	int content_length = 0;
 	int body_bytes_written = 0;
 	
-	if (get_cache_filename(config, r, &cachefilename))
+	if (! get_cache_filename(config, r, &cachefilename))
 		return 0;
 
 	apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool);
@@ -342,9 +353,8 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpre
 	}
 	adjust_headers_for_sending(config, r, httpresponse);
 
-	if(r->header_only) {
+	if(r->header_only)
 		return 1;
-	}
 
 	write_error = 0;
 	/* TODO add checking of errors in reading from file */
@@ -426,8 +436,7 @@ static apr_time_t parse_xwodan_expire(request_rec *r,
 				     "request time, won't cache response");
 			return 0;
 		} else 
-			*cachetime_interval = 
-				apr_time_sec((apr_time_from_sec(expire_time) - r->request_time));
+			*cachetime_interval = apr_time_sec((apr_time_from_sec(expire_time) - r->request_time));
 
 	}
 
@@ -443,12 +452,10 @@ static wodan_default_cachetime_t* default_cachetime_longest_match(wodan_config_t
 	longest = NULL;
 	length = 0;
 	list = (wodan_default_cachetime_t*) config->default_cachetimes->elts;
-	for(i=0; i < config->default_cachetimes->nelts; i++)
-	{
+	for(i=0; i < config->default_cachetimes->nelts; i++) {
 		int l = (int) strlen(list[i].path);
 
-		if(l > length && strncmp(list[i].path, uri, l) == 0)
-		{
+		if(l > length && strncmp(list[i].path, uri, l) == 0) {
 			longest = &list[i];
 			length = l;
 		}
@@ -462,7 +469,6 @@ static wodan_default_cachetime_header_t* default_cachetime_header_match(wodan_co
 	const char *header;
 	char *header_value;
 	int i;
-
 	
 	list = (wodan_default_cachetime_header_t*) config->default_cachetimes_header->elts;
 	for (i = 0; i < config->default_cachetimes_header->nelts; i++) {
@@ -470,8 +476,7 @@ static wodan_default_cachetime_header_t* default_cachetime_header_match(wodan_co
 		header_value = (char*) apr_table_get(headers, header);
 		
 		if (header_value != NULL)
-			if (ap_regexec(list[i].header_value_pattern, header_value, 0, 
-				    NULL, 0) == 0)
+			if (ap_regexec(list[i].header_value_pattern, header_value, 0, NULL, 0) == 0)
 				return &list[i];
 	}
 	return NULL;
@@ -514,16 +519,14 @@ static int find_cache_time(wodan_config_t *config,
 
 	default_cachetime_regex_config = default_cachetime_regex_match(config, r->uri);
 	if (default_cachetime_regex_config != NULL) {
-		cachetime = 
-			default_cachetime_regex_config->cachetime;
+		cachetime = default_cachetime_regex_config->cachetime;
 		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
 			     "Got cachetime from regex match! cachetime = %d",
 			     cachetime);
 		return cachetime;
 	}
 	
-	default_cachetime_config = 
-		default_cachetime_longest_match(config, r->uri);
+	default_cachetime_config = default_cachetime_longest_match(config, r->uri);
 	if (default_cachetime_config != NULL) {
 		cachetime = default_cachetime_config->cachetime;
 		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
@@ -594,17 +597,11 @@ static char *get_expire_time(wodan_config_t *config,
 	return expire_time_rfc822_string;
 }
 
-static apr_file_t *open_cachefile(wodan_config_t *config, request_rec *r)
+static void create_cache_dir(wodan_config_t *config, request_rec *r, char *cachefilename)
 {
-	apr_file_t *cachefile = NULL;
-	char *cachefilename;
-	int i;
+	int i, result;
 	char *subdir;
-	int result;
 	struct stat dir_status;
-
-	if (! get_cache_filename(config, r, &cachefilename))
-		return NULL;
 
 	for (i = 0; i < config->cachedir_levels; i++) {
 		subdir = get_cache_file_subdir(config, r, cachefilename, i);
@@ -614,16 +611,6 @@ static apr_file_t *open_cachefile(wodan_config_t *config, request_rec *r)
 			mkdir(subdir, 0770);
 	}
 
-	apr_file_open(&cachefile, cachefilename, 
-		APR_WRITE | APR_CREATE | APR_TRUNCATE, APR_OS_DEFAULT,
-		r->pool);
-	if(cachefile == NULL) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-			     "Error opening cache file, filename = %s, config->cachedir = %s", 
-			     cachefilename, config->cachedir);
-		return NULL;
-	}
-	return cachefile;
 }
 
 /**
@@ -702,40 +689,24 @@ apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
 
 void cache_close_cachefile(wodan_config_t *config, request_rec *r, apr_file_t *temp_cachefile)
 {
-	apr_file_t *real_cachefile;
-	char buffer[BUFFERSIZE];
-	apr_size_t bytes_read, bytes_written;
-	apr_off_t START_OF_FILE_OFFSET = 0; /* this cannot be declared constant because
-	* it will be passed by reference to apr_file_seek */
+	const char * src;
+	char *dst;
 
-	/* open the real cache file (until now, only a temporary file
-	   was openened) */
+	// copy the temporary file into the real cache file 
 	if (!temp_cachefile) {
 		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
 			"no temp cachefile");
+		return;
 	}
-	if (temp_cachefile) {
-		if ((real_cachefile = open_cachefile(config, r)) == NULL) {
-			apr_file_close(temp_cachefile);
-			return;
-		}
-		apr_file_seek(temp_cachefile, APR_SET, (apr_off_t *) &START_OF_FILE_OFFSET);
-		/* TODO add error checking */
-		while(!apr_file_eof(temp_cachefile)) {
-			apr_file_read_full(temp_cachefile, buffer, BUFFERSIZE, &bytes_read);
-			apr_file_write_full(real_cachefile, buffer, bytes_read, &bytes_written);
-			if (bytes_read != bytes_written) {
-				// TODO: What now This is an error. The read_full and write_full
-				// functions should block until everything's read and written 
-			}
-			if(bytes_read < BUFFERSIZE)
-				break;
-		}
-		/* TODO add error checking for file reads and writes */		
-		apr_file_close(temp_cachefile);
-		apr_file_flush(real_cachefile);
-		apr_file_close(real_cachefile);
-	}
+
+	if (! get_cache_filename(config, r, &dst))
+		return;
+
+	create_cache_dir(config, r, dst);
+
+	apr_file_name_get(&src, temp_cachefile);
+	apr_file_copy(src, dst, APR_FILE_SOURCE_PERMS, r->pool);
+	apr_file_close(temp_cachefile);
 }		
 
 int cache_update_expiry_time(wodan_config_t *config, request_rec *r) 
@@ -780,6 +751,4 @@ int cache_update_expiry_time(wodan_config_t *config, request_rec *r)
 	return 0;
 }
 
-/** static functions down here */
-
-
+//EOF

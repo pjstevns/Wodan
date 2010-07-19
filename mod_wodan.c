@@ -24,6 +24,7 @@
 #include "http_protocol.h"
 #include "ap_config.h"
 #include "apr_strings.h"
+#include "apr_date.h"
 #include <string.h>
 #include <time.h>
 
@@ -352,6 +353,7 @@ static int wodan_handler(request_rec *r)
 	httpresponse_t httpresponse;
 	WodanCacheStatus_t cache_status;
 	apr_time_t cache_file_time;
+	const char *ifmodsince;
 	wodan_proxy_destination_t *proxy_destination;
 	
 	config = (wodan_config_t *)ap_get_module_config(r->server->module_config, &wodan_module);
@@ -405,6 +407,14 @@ static int wodan_handler(request_rec *r)
 	}
 
 	if (cache_status == WODAN_CACHE_PRESENT) {
+		if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since")) != NULL) {
+			apr_time_t if_modified_since;
+			if ((if_modified_since = apr_date_parse_http(ifmodsince)) != APR_DATE_BAD) {
+				if (cache_file_time < if_modified_since)
+					return HTTP_NOT_MODIFIED;
+			}
+		}
+
 	  	cache_read_from_cache(config, r, &httpresponse);
 		apr_table_set(r->notes, "WodanSource", LOG_SOURCE_CACHED);
 	} else if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(response) || response == HTTP_NOT_MODIFIED)) {
