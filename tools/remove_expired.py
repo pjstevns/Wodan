@@ -1,14 +1,17 @@
-#!/usr/bin/python2.3
+#!/usr/bin/python
 import sys, os
 import time
 from datetime import datetime,timedelta
 
 mindelta = timedelta(seconds=1)
 
+date_format = "%a, %d %b %Y %H:%M:%S"
+
 def checkExpired(expireTimeStr):
     parts = expireTimeStr.split()
     expireTimeStr = " ".join(parts[:-1])
-    expireTime = datetime.fromtimestamp(time.mktime(time.strptime(expireTimeStr, "%a %d %b %Y %H:%M:%S")))
+    expireTime = datetime.fromtimestamp(time.mktime(time.strptime(expireTimeStr,
+                                                                  date_format)))
     if currentTime > expireTime:
         return 1
     else:
@@ -17,17 +20,21 @@ def checkExpired(expireTimeStr):
 def isExpired(file):
     # first line of cache file holds URL, fourth line hold the expiry time
     fd = open(file, "r")
-    for i in range(0,4):
+    for i in range(0,3):
         line = fd.readline()
         if len(line) == 0: return 0
     fd.close()
-    return checkExpired(line)
+    try:
+        return checkExpired(line)
+    except:
+        return True
 
 if __name__ == '__main__':
 
     currentTime = datetime.utcnow()
-    nowstr = currentTime.strftime("%a %d %b %Y %H:%M:%S")
-    testTime = datetime.fromtimestamp(time.mktime(time.strptime(nowstr, "%a %d %b %Y %H:%M:%S")))
+    nowstr = currentTime.strftime(date_format)
+    testTime = datetime.fromtimestamp(time.mktime(time.strptime(nowstr,
+                                                                date_format)))
     delta = currentTime - testTime
     assert(delta <= mindelta)
         
@@ -45,12 +52,13 @@ if __name__ == '__main__':
     # get files in directory
     directories = []
     directories.append(cachedir)
-    removedfiles = 0
+    allfiles = 0; removedfiles = 0
     try:
         while(1):
             directory = directories.pop()
             files = [os.path.join(directory, f) for f in os.listdir(directory)]
             for file in files:
+                allfiles += 1
                 if os.path.isdir(file):
                     directories.append(file)
                 elif os.path.isfile(file):
@@ -61,8 +69,8 @@ if __name__ == '__main__':
     except IndexError:
         pass
 
-    if removedfiles > 0:
-        os.system("/usr/bin/logger -t wodan/gc removed %d files" % (removedfiles))
+    os.system("/usr/bin/logger -t wodan/gc removed %d/%d files" %
+              (removedfiles,allfiles))
                     
                 
                     
