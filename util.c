@@ -75,8 +75,8 @@ int util_file_is_writable(apr_pool_t *p, const char *path)
 int util_string_is_number(const char *the_string)
 {
 	while (*the_string != '\0')
-	if (!apr_isdigit(*(the_string++)))
-		return 0;
+		if (!apr_isdigit(*(the_string++)))
+			return 0;
 	return 1;
 }
 
