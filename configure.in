@@ -1,5 +1,5 @@
-# $Id$
 # Copyright (C) 2005 IC & S
+# Copyright (C) 2008-2010 NFG
 #
 # This program is free software; you can redistribute it and/or 
 # modify it under the terms of the GNU General Public License 
@@ -17,7 +17,7 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 AC_PREREQ(2.57)
-AC_INIT([wodan], [2.2.0], [wodan@ic-s.nl])
+AC_INIT([wodan], [2.2.0], [paul@nfg.nl])
 # Checks for programs.
 AC_PROG_CC
 

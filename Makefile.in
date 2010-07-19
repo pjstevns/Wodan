@@ -24,7 +24,7 @@ OBJECT_FILES=mod_wodan.o \
 	     networkconnector.o \
 	     util.o
 
-DEFS=-W -Wall -Wpointer-arith -Wstrict-prototypes
+DEFS=-Wc,-Wall -Wc,-Wpointer-arith -Wc,-Wstrict-prototypes
 INCLUDES=-I$(apache_dir)/include
 
 #   the default target
