@@ -145,11 +145,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 			const char *value = apr_table_get(r->headers_in, key);
 
 			if (value) {
-				ap_log_error(APLOG_MARK, 
-						APLOG_NOERRNO|APLOG_DEBUG,
-						0, r->server, 
-						"Found header for hash [%s: %s]", 
-						key, value);
+				DEBUG("%s: Found header for hash [%s: %s]", __func__, key, value);
 				apr_sha1_update(&sha, value, strlen(value));
 			}
                 }
@@ -165,7 +161,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 			ap_regex_t *exp = match[i].regex;
 			const char *rep = match[i].pattern;
 
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Lookup header [%s]", match[i].header);
+			DEBUG("%s: Lookup header [%s]", __func__, match[i].header);
 
 			const char *val, *value = apr_table_get(r->headers_in, key);
 
@@ -180,15 +176,11 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 						val = value;
 
 					if (val) {
-						ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG,
-								0, r->server, "Found header match [%s: %s] -> use [%s]", 
-								key, value, val);
+						DEBUG("%s: Found header match [%s: %s] -> use [%s]", __func__, key, value, val);
 						apr_sha1_update(&sha, val, strlen(val));
 					}
 				} else {
-					ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG,
-							0, r->server, "No match on [%s: %s]", 
-							key, value);
+					DEBUG("%s: No match on [%s: %s]", __func__, key, value);
 				}
 					
 			}
@@ -204,8 +196,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 	 * we have a problem */
 	if (strlen(config->cachedir) > 
 	     (MAX_CACHEFILE_PATH_LENGTH - 32 - (2 * MAX_CACHEDIR_LEVELS))) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, 
-			     "Cachefile pathname doesn't fit into buffer.");
+		ERROR("%s: Cachefile pathname doesn't fit into buffer.", __func__);
 		*filename = NULL;
 		return 0;
 	}
@@ -225,7 +216,8 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 
 	*filename = ap_make_full_path(r->pool, dir, checksum);
 
-	ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server, "%s: use cachefile: %s", __func__, *filename);
+	DEBUG("%s: %s", __func__, *filename);
+
 	return 1;
 }
 
@@ -273,8 +265,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 		/* time - interval_time = time that file was created */
 		*cache_file_time = cachefile_expire_time - apr_time_from_sec(interval_time);
 		ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-				"ttl [%ld]", ttl);
+		DEBUG("%s: ttl [%ld]", __func__, ttl);
 
 		if((ttl <= 0) && (!config->run_on_cache)) {
 			apr_file_close(cachefile);
@@ -380,16 +371,14 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpre
 		user_agent = apr_table_get(r->headers_in, "User-Agent");
 		if (user_agent == NULL) 
 			user_agent = "unknown";
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, 
-				"error writing to socket. "
+		ERROR("%s: error writing to socket. "
 				"Bytes written/Body length = %d/%d, "
-				"User-Agent: %s",
+				"User-Agent: %s", __func__, 
 				body_bytes_written, content_length, user_agent);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-			"Returned answer from cachefile: %s", cachefilename);
+	DEBUG("%s: %s OK", __func__, cachefilename);
 
 	return 1;
 }
@@ -549,17 +538,13 @@ static char *get_expire_time(wodan_config_t *config,
 	apr_time_t expire_time = 0;
 	
 
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-		     r->server, "entering %s", __func__);
+	DEBUG("entering %s", __func__);
 	
 	*cachetime_interval = 0;
 	cachetime = find_cache_time(config, r, httpresponse);
 	/* check X-Wodan header */
-	if (httpresponse && 
-	    (xwodan = (char *) apr_table_get(httpresponse->headers, "X-Wodan"))
-	    != NULL) {
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			     "Found an X-Wodan header \"%s\"", xwodan);
+	if (httpresponse && (xwodan = (char *) apr_table_get(httpresponse->headers, "X-Wodan")) != NULL) {
+		DEBUG("%s: Found an X-Wodan header \"%s\"", __func__, xwodan);
 		if (strncasecmp(xwodan, "no-cache", 8) == 0) {
 			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
 				     r->server, "Header is 'no-cache'. "

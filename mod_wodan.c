@@ -366,7 +366,7 @@ static int wodan_handler(request_rec *r)
 	// see if the request can be handled from the cache.
 	cache_status = cache_get_status(config, r, &cache_file_time);
 
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Cache status: %d", cache_status);
+	DEBUG("%s: cache_get_status: %d", __func__, cache_status);
 
 	if ((config->cache_404s) && (cache_status == WODAN_CACHE_404)) {
 		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "URL is cached as 404");
@@ -409,8 +409,8 @@ static int wodan_handler(request_rec *r)
 	if (cache_status == WODAN_CACHE_PRESENT) {
 		if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since")) != NULL) {
 			apr_time_t if_modified_since;
-			if ((if_modified_since = apr_date_parse_http(ifmodsince)) != APR_DATE_BAD) {
-				if (cache_file_time < if_modified_since)
+			if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
+				if (cache_file_time <= if_modified_since)
 					return HTTP_NOT_MODIFIED;
 			}
 		}
@@ -426,7 +426,7 @@ static int wodan_handler(request_rec *r)
 	}
 
 	//Return some response code
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "returning: %d",  httpresponse.response);
+	DEBUG("%s: returning: %d",  __func__, httpresponse.response);
 	
 	return OK; 
 }

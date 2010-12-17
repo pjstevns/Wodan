@@ -63,8 +63,7 @@ int util_file_is_writable(apr_pool_t *p, const char *path)
 	apr_uid_t user_id;
 	apr_gid_t group_id;
 	
-	apr_stat(&file_info, path, APR_FINFO_USER | APR_FINFO_GROUP |
-		APR_FINFO_PROT, p);
+	apr_stat(&file_info, path, APR_FINFO_USER | APR_FINFO_GROUP | APR_FINFO_PROT, p);
 	apr_uid_current(&user_id, &group_id, p);
 	
 	if (file_info.protection & APR_UWRITE)
@@ -203,13 +202,13 @@ void apply_proxy_pass_reverse(wodan_config_t *config, apr_table_t* headers,
 		return;
 	
 	if((url = apr_table_get(headers, "Location")) != NULL)
-		apr_table_set(headers, "Location", 
-			wodan_location_reverse_map(alias, url, r));
+		apr_table_set(headers, "Location", wodan_location_reverse_map(alias, url, r));
+
 	if((url = apr_table_get(headers, "URI")) != NULL)
 		apr_table_set(headers, "URI", wodan_location_reverse_map(alias, url, r));
+
 	if((url = apr_table_get(headers, "Content-Location")) != NULL)
-		apr_table_set(headers, "Content-Location", 
-			wodan_location_reverse_map(alias, url, r));
+		apr_table_set(headers, "Content-Location", wodan_location_reverse_map(alias, url, r));
 }
 
 const char* wodan_location_reverse_map(wodan_proxy_alias_t* alias, const char *url,
@@ -220,12 +219,12 @@ const char* wodan_location_reverse_map(wodan_proxy_alias_t* alias, const char *u
 	
 	url_len = strlen(url);
 	alias_len = strlen(alias->alias);
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Replacing %s with %s", url, alias->alias);
+	DEBUG("%s: Replacing %s with %s", __func__, url, alias->alias);
 	if (url_len >= alias_len && strncmp(alias->alias, url, alias_len) == 0) {
 		char *constructed_url, *result;
 		constructed_url = apr_pstrcat(r->pool, alias->path, &url[alias_len], NULL);
 		result = ap_construct_url(r->pool, constructed_url, r);
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Replacing with %s", result);
+		DEBUG("%s: Replacing with %s", __func__, result);
 		return (const char *)result;
 	}
 	else return url;

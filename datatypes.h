@@ -15,6 +15,12 @@
 
 #define BUFFERSIZE 2048
 
+#define DEBUG(fmt...) \
+	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, fmt)
+
+#define ERROR(fmt...) \
+	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, fmt)
+
 #define DEFAULT_CACHETIME 3600
 
 #ifdef __GNUC__
