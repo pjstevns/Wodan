@@ -100,7 +100,7 @@ static const char *add_pass(cmd_parms *cmd, void *dummy UNUSED,
 	
 	if(path[0] != '/' || path[(int) strlen(path) - 1] != '/')
 	        return "First argument of WodanPass should be a dir e.g. /dir/";
-	if (strncasecmp(url, "http://", 7) != 0) 
+	if (strncasecmp(url, "http://", 7) != 0)
 		return "Second argument of WodanPass should be a http:// url";
 	
 	proxy_url = apr_pstrdup(cmd->pool, url);
@@ -123,8 +123,8 @@ static const char *add_pass_reverse(cmd_parms *cmd,
 	
 	if(path[0] != '/' || path[(int) strlen(path) - 1] != '/')
 	        return "First argument of WodanPassReverse should be a dir e.g. /dir/";
-	if (strncasecmp(url, "http://", 7) != 0) 
-		return "Second argument of WodanPassReverse should be a http:// url";
+	if ((strncasecmp(url, "http://", 7) != 0) && (strncasecmp(url, "https://", 8) != 0))
+		return "Second argument of WodanPassReverse should be a http:// or https:// url";
 	
 	proxy_alias = apr_array_push(config->proxy_passes_reverse);
 	proxy_alias->path = path;
