@@ -225,7 +225,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 
 	*filename = ap_make_full_path(r->pool, dir, checksum);
 
-	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "%s: use cachefile: %s", __func__, *filename);
+	ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server, "%s: use cachefile: %s", __func__, *filename);
 	return 1;
 }
 
