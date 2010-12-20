@@ -38,7 +38,7 @@
 
 #define LOGFORMAT "%s: %s"
 
-void wodan_trace(request_rec *r, int level, const char *func, const char *formatstring, ...)
+void wodan_trace(request_rec *r, int level, const char *file, int line, const char *func, const char *formatstring, ...)
 {
 	va_list ap, cp;
 	char *message = NULL;
@@ -47,7 +47,7 @@ void wodan_trace(request_rec *r, int level, const char *func, const char *format
 	message = apr_pvsprintf(r->pool, formatstring, cp);
 	va_end(cp);
 
-	ap_log_error(APLOG_MARK, level, 0, r->server, LOGFORMAT, func, message);
+	ap_log_error(file, line, level, 0, r->server, LOGFORMAT, func, message);
 
 }
 /**

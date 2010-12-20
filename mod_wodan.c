@@ -396,6 +396,9 @@ static int wodan_handler(request_rec *r)
 		   nothing in cache, return the response code so
 		   ErrorDocument can handle it ... */
 		if ((response == HTTP_NOT_FOUND || ap_is_HTTP_SERVER_ERROR(response)) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
+			if (config->run_on_cache)
+				response = HTTP_NOT_FOUND;
+
 			DEBUG("returning: %d", response);
 			return response;
 		} 

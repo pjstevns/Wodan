@@ -267,7 +267,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 		ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
 		DEBUG("ttl [%ld]", ttl);
 
-		if((ttl <= 0) && (!config->run_on_cache)) {
+		if(ttl <= 0) {
 			apr_file_close(cachefile);
 			return WODAN_CACHE_PRESENT_EXPIRED;
 		}
@@ -664,7 +664,7 @@ int cache_update_expiry_time(wodan_config_t *config, request_rec *r)
 {
 	char *cachefilename;
 	int expire_interval;
-	int expire_time;
+	long int expire_time;
 	char *expire_time_string = NULL;
 	apr_file_t *cachefile;
 	char buffer[BUFFERSIZE];
@@ -682,10 +682,11 @@ int cache_update_expiry_time(wodan_config_t *config, request_rec *r)
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
 	/* calculate new expire_time */
 	expire_interval = (int) strtol(buffer, NULL, 10);
-	expire_time = r->request_time + apr_time_from_sec(expire_interval);
+	expire_time = apr_time_sec(r->request_time) + expire_interval;
 	expire_time_string = apr_pcalloc(r->pool, APR_RFC822_DATE_LEN);
-	apr_rfc822_date(expire_time_string, expire_time);
+	apr_rfc822_date(expire_time_string, apr_time_from_sec(expire_time));
 	/* write new expire time field in cachefile */
+	DEBUG("%s", expire_time_string);
 	apr_file_write_full(cachefile, expire_time_string, strlen(expire_time_string),
 			&bytes_written);
 	if (bytes_written != strlen(expire_time_string)) {

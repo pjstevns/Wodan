@@ -34,10 +34,10 @@
 #include "apr_version.h"
 
 #define DEBUG(fmt...) \
-	wodan_trace(r, APLOG_NOERRNO|APLOG_DEBUG, __func__, fmt)
+	wodan_trace(r, APLOG_NOERRNO|APLOG_DEBUG, __FILE__, __LINE__, __func__, fmt)
 
 #define ERROR(fmt...) \
-	wodan_trace(r, APLOG_ERR, __func__, fmt)
+	wodan_trace(r, APLOG_ERR, __FILE__, __LINE__, __func__, fmt)
 
 
 /**

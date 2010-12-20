@@ -234,11 +234,13 @@ sections:
 	WodanRunOnCache on|off
 	----------------------
 
-	FIXME: this does not work as advertised. Is it necessary at all?
+	If set to on, only for requests that are not present in the cache is the backend
+        contacted. The (virtual) server will never return 50x errors if the backend is 
+	unreachable. This can for instance be useful if there is some scheduled downtime 
+	on the backend, but you would like to keep a site on-line.
 
-	If set to on, the (virtual) server will not use the backend. This can for
-	instance be useful if there is some scheduled downtime on the backend, but
-	you would like to keep a site on-line.
+	A logical side effect of this is that files which can be served from cache, are 
+	served from the cache, even when they are expired (ttl < 0).
 
 	If a requested page cannot be found in the cache, a 404 NOT FOUND error 
 	is sent to the client.
