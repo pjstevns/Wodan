@@ -42,8 +42,7 @@ static int send_request(apr_socket_t *socket,
  * @retval OK on succes
  * @retval -1 on failure.
  */
-static int send_headers(apr_socket_t *socket, 
-			 const request_rec *r, const apr_table_t *headers);
+static int send_headers(apr_socket_t *socket, request_rec *r, const apr_table_t *headers);
 
 
 /** receive status line from backend
@@ -173,11 +172,8 @@ static int send_request_body(apr_socket_t *socket, request_rec *r)
 		int nr_bytes_read;
 		char buffer[BUFFERSIZE];
 
-		while ((nr_bytes_read = 
-			ap_get_client_block(r, buffer, BUFFERSIZE)) > 0) { 
-			if (connection_write_bytes(socket, r,
-						   buffer,
-						   nr_bytes_read) == -1) 
+		while ((nr_bytes_read = ap_get_client_block(r, buffer, BUFFERSIZE)) > 0) { 
+			if (connection_write_bytes(socket, r, buffer, nr_bytes_read) == -1) 
 				return -1;
 		}
 	}
@@ -274,8 +270,7 @@ static int send_request(apr_socket_t *socket, request_rec *r,
 	return OK;
 }
 
-static int send_headers(apr_socket_t *socket, 
-		  const request_rec *r, const apr_table_t *headers) 
+static int send_headers(apr_socket_t *socket, request_rec *r, const apr_table_t *headers) 
 {
 	int i;
 	const char* header_end_string;
@@ -304,8 +299,7 @@ static int send_headers(apr_socket_t *socket,
 					    headers_elts[i].key,
 					    headers_elts[i].val, 
 					    CRLF);
-		if (connection_write_string(socket, r, 
-					    header_string) == -1)
+		if (connection_write_string(socket, r, header_string) == -1)
 			return -1;
 	}
 	/* add empty line, signals end of headers */
@@ -384,7 +378,7 @@ static int receive_status_line(apr_socket_t *socket, request_rec *r,
 	http_string = ap_getword_white(r->pool, &read_string);
 	status_string = ap_getword_white(r->pool, &read_string);
 	
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "statusstr = %s", status_string);
+	DEBUG("statusstr = %s", status_string);
 
 	status = atoi(status_string);
 	
@@ -460,9 +454,7 @@ static int receive_headers(apr_socket_t *socket, request_rec *r,
 		}
 		apr_table_add(httpresponse->headers, key, val);
 		free(header);
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			     "Added header: \"%s\", value: \"%s\"", 
-			     key, val);
+		DEBUG("Added header: \"%s\", value: \"%s\"", key, val);
 	}
 	/* adjust headers */
 	ap_reverseproxy_clear_connection(r->pool, httpresponse->headers);
@@ -494,9 +486,7 @@ static int receive_body(wodan_config_t *config, apr_socket_t *socket,
 		nr_bytes_read = connection_read_bytes(socket, r, buffer, BUFFERSIZE);
 		//nr_bytes_read = fread(buffer, sizeof(char), BUFFERSIZE, 
 		//		      connection->readstream);
-		ap_log_error(APLOG_MARK, APLOG_DEBUG|APLOG_NOERRNO, 0,
-			     r->server, "read %d bytes from backend",
-			     nr_bytes_read);
+		DEBUG("read %d bytes from backend", nr_bytes_read);
 		
 		if (nr_bytes_read == -1) backend_read_error = 1;
 
@@ -544,24 +534,20 @@ static int receive_body(wodan_config_t *config, apr_socket_t *socket,
 		content_length = (content_length_str) ? 
 			atoi(content_length_str): 0;
 					
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, 
-			     "Error writing to client. "
-			     "Bytes written/total bytes = %d/%d, "
-			     "User-Agent: %s",
-			     body_bytes_written, content_length, user_agent);
+		ERROR("Error writing to client. " 
+				"Bytes written/total bytes = %d/%d, " 
+				"User-Agent: %s", body_bytes_written, content_length, user_agent);
 		return HTTP_BAD_GATEWAY;
 	}
 
 	if (cache_write_error) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-			     "Error writing to cache file");
+		ERROR("Error writing to cache file");
 		ap_rflush(r);
 		return HTTP_BAD_GATEWAY;
 	}
 
 	if (backend_read_error) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-			     "Error reading from backend");
+		ERROR("Error reading from backend");
 		return HTTP_BAD_GATEWAY;
 	}
 	
@@ -577,26 +563,26 @@ static apr_socket_t* connection_open (wodan_config_t *config, char* host, int po
 	apr_socket_t *socket;
 	apr_sockaddr_t *server_address;
 	
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,r->server, "Looking up host %s", host);
+	DEBUG("Looking up host %s", host);
 	if (apr_sockaddr_info_get(&server_address, host, APR_UNSPEC, port, 0, r->pool) != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Hostname lookup failure for: %s", host);
+		ERROR("Hostname lookup failure for: %s", host);
 		return NULL;
 	}
 	
 	if (apr_socket_create(&socket, APR_INET, SOCK_STREAM, APR_PROTO_TCP,  r->pool) != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Error creating socket");
+		ERROR("Error creating socket");
 		return NULL;
 	}
 
 	if (config->backend_timeout > 0) {
 		apr_socket_timeout_set(socket, config->backend_timeout);
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "socket timeout set to %ld", config->backend_timeout);
+		ERROR("socket timeout set to %ld", config->backend_timeout);
 	}
 	if (apr_socket_connect(socket, server_address) != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "Socket error while connecting to server at %s:%d", host, port);
+		ERROR("Socket error while connecting to server at %s:%d", host, port);
 		return NULL;
 	}
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Succesfully connected to %s:%d", host, port);
+	DEBUG("Succesfully connected to %s:%d", host, port);
 
 	return socket;
 }
@@ -621,14 +607,11 @@ int http_proxy (wodan_config_t *config, const char* proxyurl, char* uri,
 				  &desthost, &destport,
 				  &destpath, &dest_host_and_port,
 				  &do_ssl)) != 0) {
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0,
-			     r->server, "failed to parse proxy_url %s and "
-			     "uri %s, retval = %d", proxyurl, uri, gdp_retval);
+		ERROR("failed to parse proxy_url %s and uri %s, retval = %d", proxyurl, uri, gdp_retval);
 		return 0;
 	}
 		
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-		     "Destination: %s %d %s", desthost, destport, destpath);
+	DEBUG("Destination: %s %d %s", desthost, destport, destpath);
 	
 	//Connect to proxyhost
 	socket = connection_open(config, desthost, destport, r, do_ssl);

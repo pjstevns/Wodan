@@ -11,12 +11,12 @@
 
 #include <sys/time.h>
 
-int connection_write_bytes(apr_socket_t *socket, const request_rec *r, const char *buffer, int buffersize);
+int connection_write_bytes(apr_socket_t *socket, request_rec *r, const char *buffer, int buffersize);
 
-int connection_read_bytes(apr_socket_t *socket, const request_rec *r, char *buffer, int buffersize);
+int connection_read_bytes(apr_socket_t *socket, request_rec *r, char *buffer, int buffersize);
 
-int connection_write_string(apr_socket_t *socket, const request_rec *r, const char *the_string);
+int connection_write_string(apr_socket_t *socket, request_rec *r, const char *the_string);
 
-char *connection_read_string(apr_socket_t *socket, const request_rec *r);
+char *connection_read_string(apr_socket_t *socket, request_rec *r);
 
 #endif

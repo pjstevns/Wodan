@@ -361,15 +361,15 @@ static int wodan_handler(request_rec *r)
 	if (! (proxy_destination = destination_longest_match(config, r->unparsed_uri)))
 		return DECLINED;
 
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Processing new request: %s%s", r->hostname, r->unparsed_uri);
+	DEBUG("Processing new request: %s%s", r->hostname, r->unparsed_uri);
 
 	// see if the request can be handled from the cache.
 	cache_status = cache_get_status(config, r, &cache_file_time);
 
-	DEBUG("%s: cache_get_status: %d", __func__, cache_status);
+	DEBUG("cache_get_status: %d", cache_status);
 
 	if ((config->cache_404s) && (cache_status == WODAN_CACHE_404)) {
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "URL is cached as 404");
+		DEBUG("URL is cached as 404");
 		return HTTP_NOT_FOUND;
 	}
 	
@@ -383,10 +383,7 @@ static int wodan_handler(request_rec *r)
 		int l = (int) strlen(proxy_destination->path);
 		newpath = &(r->unparsed_uri[l - 1]);
 
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-				"No cache, getting content from remote "
-				"url: %s path: %s", 
-				proxy_destination->url, newpath);
+		DEBUG("No cache, getting content from remote url: %s path: %s", proxy_destination->url, newpath);
 
 		//Get the httpresponse from remote server	
 		response = http_proxy(config, proxy_destination->url, newpath, &httpresponse, r, cache_file_time);
@@ -399,11 +396,11 @@ static int wodan_handler(request_rec *r)
 		   nothing in cache, return the response code so
 		   ErrorDocument can handle it ... */
 		if ((response == HTTP_NOT_FOUND || ap_is_HTTP_SERVER_ERROR(response)) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "returning: %d", response);
+			DEBUG("returning: %d", response);
 			return response;
 		} 
 
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "Got response from gateway: %d", httpresponse.response);
+		DEBUG("Got response from gateway: %d", httpresponse.response);
 	}
 
 	if (cache_status == WODAN_CACHE_PRESENT) {
@@ -426,7 +423,7 @@ static int wodan_handler(request_rec *r)
 	}
 
 	//Return some response code
-	DEBUG("%s: returning: %d",  __func__, httpresponse.response);
+	DEBUG("returning: %d",  httpresponse.response);
 	
 	return OK; 
 }

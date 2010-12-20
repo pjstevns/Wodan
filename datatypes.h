@@ -4,6 +4,7 @@
 #ifndef _DATATYPES_H_
 #define _DATATYPES_H_
 
+
 #define MAX_CACHE_PATH_SIZE 1024
 #define DEFAULT_CACHEDIR_LEVELS 2
 #define MAX_CACHEDIR_LEVELS 8
@@ -15,18 +16,14 @@
 
 #define BUFFERSIZE 2048
 
-#define DEBUG(fmt...) \
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, fmt)
-
-#define ERROR(fmt...) \
-	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, fmt)
-
 #define DEFAULT_CACHETIME 3600
 
 #ifdef __GNUC__
 #define UNUSED __attribute__((__unused__))
+#define PRINTF_ARGS(X, Y) __attribute__((format(printf, X, Y)))
 #else
 #define UNUSED
+#define PRINTF_ARGS(X, Y)
 #endif
 
 #include "httpd.h"
@@ -35,6 +32,13 @@
 #include "apr_time.h"
 #include "apr_strmatch.h"
 #include "apr_version.h"
+
+#define DEBUG(fmt...) \
+	wodan_trace(r, APLOG_NOERRNO|APLOG_DEBUG, __func__, fmt)
+
+#define ERROR(fmt...) \
+	wodan_trace(r, APLOG_ERR, __func__, fmt)
+
 
 /**
  * Structure that contains the config elements of wodan

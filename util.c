@@ -1,5 +1,6 @@
 /**
  * (c) 2000-2006 IC&S, The Netherlands
+ * (c) 2008-2011 NFG, The Netherlands
  * @file util.c
  *
  * Implements different utility functions that are used by Wodan
@@ -31,6 +32,24 @@
 #define SECONDS_IN_DAY (24 * SECONDS_IN_HOUR)
 #define SECONDS_IN_WEEK (7 * SECONDS_IN_DAY)
 
+/**
+ * debug instrumentation
+ */
+
+#define LOGFORMAT "%s: %s"
+
+void wodan_trace(request_rec *r, int level, const char *func, const char *formatstring, ...)
+{
+	va_list ap, cp;
+	char *message = NULL;
+	va_start(ap, formatstring);
+	va_copy(cp, ap);
+	message = apr_pvsprintf(r->pool, formatstring, cp);
+	va_end(cp);
+
+	ap_log_error(APLOG_MARK, level, 0, r->server, LOGFORMAT, func, message);
+
+}
 /**
  * Copy key/data pair of overlay only if that key is not set for base.
  *
@@ -219,12 +238,12 @@ const char* wodan_location_reverse_map(wodan_proxy_alias_t* alias, const char *u
 	
 	url_len = strlen(url);
 	alias_len = strlen(alias->alias);
-	DEBUG("%s: Replacing %s with %s", __func__, url, alias->alias);
+	DEBUG("Replacing %s with %s", url, alias->alias);
 	if (url_len >= alias_len && strncmp(alias->alias, url, alias_len) == 0) {
 		char *constructed_url, *result;
 		constructed_url = apr_pstrcat(r->pool, alias->path, &url[alias_len], NULL);
 		result = ap_construct_url(r->pool, constructed_url, r);
-		DEBUG("%s: Replacing with %s", __func__, result);
+		DEBUG("Replacing with %s", result);
 		return (const char *)result;
 	}
 	else return url;

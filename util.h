@@ -10,6 +10,8 @@
 #include "httpd.h"
 #include "http_protocol.h"
 
+void wodan_trace(request_rec *r, int level, const char *func, const char *formatstring, ...) PRINTF_ARGS(4,5);
+
 /**
  * determines if a file or directory is writable
  * @param p memory pool

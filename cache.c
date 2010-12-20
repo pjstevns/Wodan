@@ -145,7 +145,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 			const char *value = apr_table_get(r->headers_in, key);
 
 			if (value) {
-				DEBUG("%s: Found header for hash [%s: %s]", __func__, key, value);
+				DEBUG("Found header for hash [%s: %s]", key, value);
 				apr_sha1_update(&sha, value, strlen(value));
 			}
                 }
@@ -161,7 +161,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 			ap_regex_t *exp = match[i].regex;
 			const char *rep = match[i].pattern;
 
-			DEBUG("%s: Lookup header [%s]", __func__, match[i].header);
+			DEBUG("Lookup header [%s]", match[i].header);
 
 			const char *val, *value = apr_table_get(r->headers_in, key);
 
@@ -176,11 +176,11 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 						val = value;
 
 					if (val) {
-						DEBUG("%s: Found header match [%s: %s] -> use [%s]", __func__, key, value, val);
+						DEBUG("Found header match [%s: %s] -> use [%s]", key, value, val);
 						apr_sha1_update(&sha, val, strlen(val));
 					}
 				} else {
-					DEBUG("%s: No match on [%s: %s]", __func__, key, value);
+					DEBUG("No match on [%s: %s]", key, value);
 				}
 					
 			}
@@ -196,7 +196,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 	 * we have a problem */
 	if (strlen(config->cachedir) > 
 	     (MAX_CACHEFILE_PATH_LENGTH - 32 - (2 * MAX_CACHEDIR_LEVELS))) {
-		ERROR("%s: Cachefile pathname doesn't fit into buffer.", __func__);
+		ERROR("Cachefile pathname doesn't fit into buffer.");
 		*filename = NULL;
 		return 0;
 	}
@@ -216,7 +216,7 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 
 	*filename = ap_make_full_path(r->pool, dir, checksum);
 
-	DEBUG("%s: %s", __func__, *filename);
+	DEBUG("%s", *filename);
 
 	return 1;
 }
@@ -258,14 +258,14 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 
 		/* Parses a date in RFC 822  */
 		if ((cachefile_expire_time = apr_date_parse_http(buffer)) == APR_DATE_BAD) {
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "Cachefile date not parsable. Returning \"Expired status\"");
+			DEBUG("Cachefile date not parsable. Returning \"Expired status\"");
 			return WODAN_CACHE_PRESENT_EXPIRED;
 		}
 
 		/* time - interval_time = time that file was created */
 		*cache_file_time = cachefile_expire_time - apr_time_from_sec(interval_time);
 		ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
-		DEBUG("%s: ttl [%ld]", __func__, ttl);
+		DEBUG("ttl [%ld]", ttl);
 
 		if((ttl <= 0) && (!config->run_on_cache)) {
 			apr_file_close(cachefile);
@@ -275,7 +275,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 		if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 			status = atoi(buffer);
 			if (status == HTTP_NOT_FOUND) {
-				ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "status [404]");
+				DEBUG("status [404]");
 				if (! config->cache_404s) {
 					const char *fname;
 					apr_file_name_get(&fname, cachefile);
@@ -371,14 +371,13 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpre
 		user_agent = apr_table_get(r->headers_in, "User-Agent");
 		if (user_agent == NULL) 
 			user_agent = "unknown";
-		ERROR("%s: error writing to socket. "
+		ERROR("error writing to socket. "
 				"Bytes written/Body length = %d/%d, "
-				"User-Agent: %s", __func__, 
-				body_bytes_written, content_length, user_agent);
+				"User-Agent: %s", body_bytes_written, content_length, user_agent);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	DEBUG("%s: %s OK", __func__, cachefilename);
+	DEBUG("%s OK", cachefilename);
 
 	return 1;
 }
@@ -390,20 +389,13 @@ static apr_time_t parse_xwodan_expire(request_rec *r,
 	apr_time_t expire_time;
 	char *c;
 
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-		     r->server, "entering %s", __func__);
 	*cachetime_interval = 0;
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-		     r->server, "Parsing expire header: "
-		     "\"%s\"", util_skipspaces(&xwodan[6]));
+	DEBUG("Parsing expire header: \"%s\"", util_skipspaces(&xwodan[6]));
 	c = util_skipspaces(&xwodan[6]);
 	if ( *c >= '0' && *c <= '9' ) {
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			     "Expire header is numeric. Assuming addition of "
-			     "interval to current time." );
+		DEBUG("Expire header is numeric. Assuming addition of interval to current time.");
 		*cachetime_interval = util_timestring_to_seconds(c);
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			"cachetime_interval = %d", *cachetime_interval);
+		DEBUG("cachetime_interval = %d", *cachetime_interval);
 		expire_time = r->request_time + apr_time_from_sec(*cachetime_interval);
 	} else {
 		/* IB 2004-12-07: there's no information on this next 
@@ -413,16 +405,11 @@ static apr_time_t parse_xwodan_expire(request_rec *r,
 		expire_time = apr_date_parse_http(util_skipspaces(&xwodan[6]));
 		if (expire_time == APR_DATE_BAD) { 
 			expire_time = r->request_time + apr_time_from_sec(cachetime);
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-				     r->server, "Received 0 expire time, "
-				     "using default cache time" );
+			DEBUG("Received 0 expire time, using default cache time");
 		}	
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			     "Time: %ld", (long int) expire_time);
+		DEBUG("Time: %ld", (long int) expire_time);
 		if(r->request_time > expire_time) {
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-				     r->server, "Expire date is before "
-				     "request time, won't cache response");
+			DEBUG("Expire date is before request time, won't cache response");
 			return 0;
 		} else 
 			*cachetime_interval = apr_time_sec((apr_time_from_sec(expire_time) - r->request_time));
@@ -497,11 +484,7 @@ static int find_cache_time(wodan_config_t *config,
 		default_cachetime_header_config = default_cachetime_header_match(config, httpresponse->headers);
 		if (default_cachetime_header_config != NULL) {
 			cachetime = default_cachetime_header_config->cachetime;
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-			       r->server,
-			       "Got cachetime from header match! "
-			       "cachetime = %d",
-			       cachetime);
+			DEBUG("Got cachetime from header match! cachetime = %d", cachetime);
 		  return cachetime;
 		}
 	}
@@ -509,22 +492,17 @@ static int find_cache_time(wodan_config_t *config,
 	default_cachetime_regex_config = default_cachetime_regex_match(config, r->uri);
 	if (default_cachetime_regex_config != NULL) {
 		cachetime = default_cachetime_regex_config->cachetime;
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			     "Got cachetime from regex match! cachetime = %d",
-			     cachetime);
+		DEBUG("Got cachetime from regex match! cachetime = %d", cachetime);
 		return cachetime;
 	}
 	
 	default_cachetime_config = default_cachetime_longest_match(config, r->uri);
 	if (default_cachetime_config != NULL) {
 		cachetime = default_cachetime_config->cachetime;
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-			     r->server,"Got cachetime from normal match "
-			     "cachetime = %d", cachetime);
+		DEBUG("Got cachetime from normal match cachetime = %d", cachetime);
 		return cachetime;
 	}
-	ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, 
-		     "Using normal cachetime %d", DEFAULT_CACHETIME);
+	DEBUG("Using normal cachetime %d", DEFAULT_CACHETIME);
 	return DEFAULT_CACHETIME;
 }
 
@@ -537,18 +515,13 @@ static char *get_expire_time(wodan_config_t *config,
 	char *xwodan;
 	apr_time_t expire_time = 0;
 	
-
-	DEBUG("entering %s", __func__);
-	
 	*cachetime_interval = 0;
 	cachetime = find_cache_time(config, r, httpresponse);
 	/* check X-Wodan header */
 	if (httpresponse && (xwodan = (char *) apr_table_get(httpresponse->headers, "X-Wodan")) != NULL) {
-		DEBUG("%s: Found an X-Wodan header \"%s\"", __func__, xwodan);
+		DEBUG("Found an X-Wodan header \"%s\"", xwodan);
 		if (strncasecmp(xwodan, "no-cache", 8) == 0) {
-			ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0,
-				     r->server, "Header is 'no-cache'. "
-				     "Not caching..." );
+			DEBUG("Header is 'no-cache'. Not caching..." );
 			return NULL;
 		} else if (strncasecmp(xwodan, "expire", 6) == 0) {
 			expire_time = parse_xwodan_expire(r, xwodan, 
@@ -560,11 +533,7 @@ static char *get_expire_time(wodan_config_t *config,
 			apr_rfc822_date(expire_time_rfc822_string, expire_time);
 		} else {
 			if (cachetime == -1) {
-				ap_log_error(APLOG_MARK, 
-					     APLOG_NOERRNO|APLOG_DEBUG, 0,
-					     r->server, 
-					     "WodanDefaultCacheTime in httpd.conf "
-					     "is 'no-cache'. Not caching..." );
+				DEBUG("WodanDefaultCacheTime in httpd.conf is 'no-cache'. Not caching..." );
 				return NULL;
 			}
 		}
@@ -573,9 +542,7 @@ static char *get_expire_time(wodan_config_t *config,
 	if (expire_time_rfc822_string == NULL) {
 		expire_time = r->request_time + apr_time_from_sec(cachetime);
 		*cachetime_interval = cachetime;
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			     "No expire-header found. Using default cache "
-			     " time" );
+		DEBUG("No expire-header found. Using default cache time" );
 		expire_time_rfc822_string = apr_pcalloc(r->pool, APR_RFC822_DATE_LEN);
 		apr_rfc822_date(expire_time_rfc822_string, expire_time);
 	}
@@ -638,12 +605,12 @@ apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
 	char *temp_dir;	
 	
 	if(!is_cachedir_set(config)) {
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server, "%s: cachedir not set.", __func__);
+		ERROR("cachedir not set.");
 		return NULL;
 	}
 
 	if (r->method_number != M_GET || r->header_only || !is_response_cacheable(httpresponse->response, config->cache_404s)) {
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO | APLOG_DEBUG, 0, r->server, "Response isn't cacheable");
+		DEBUG("Response isn't cacheable");
 		return NULL;
 	}
 	
@@ -654,7 +621,7 @@ apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
 		return NULL;
 	
 	if (apr_temp_dir_get((const char **) &temp_dir, r->pool) != APR_SUCCESS) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "unable to find temp dir");
+		ERROR("unable to find temp dir");
 		return NULL;
 	}
 
@@ -664,7 +631,7 @@ apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
 	
 	/* write url, expire, cache constraint and headers */
 	if (write_preamble(cache_file, r, httpresponse, expire, expire_interval) == -1) {
-		ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server, "error writing preamble to tempcachefile");
+		ERROR("error writing preamble to tempcachefile");
 		apr_file_close(cache_file);
 		return NULL;
 	}
@@ -679,8 +646,7 @@ void cache_close_cachefile(wodan_config_t *config, request_rec *r, apr_file_t *t
 
 	// copy the temporary file into the real cache file 
 	if (!temp_cachefile) {
-		ap_log_error(APLOG_MARK, APLOG_NOERRNO|APLOG_DEBUG, 0, r->server,
-			"no temp cachefile");
+		DEBUG("no temp cachefile");
 		return;
 	}
 
@@ -723,11 +689,7 @@ int cache_update_expiry_time(wodan_config_t *config, request_rec *r)
 	apr_file_write_full(cachefile, expire_time_string, strlen(expire_time_string),
 			&bytes_written);
 	if (bytes_written != strlen(expire_time_string)) {
-		ap_log_error(APLOG_MARK, 
-				APLOG_NOERRNO|APLOG_DEBUG, 0,
-				r->server, 
-				"%s: error writing to cachefile", __func__);
-
+		ERROR("error writing to cachefile");
 		apr_file_close(cachefile);
 		return -1;
 	}
