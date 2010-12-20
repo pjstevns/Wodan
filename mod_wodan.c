@@ -407,11 +407,13 @@ static int wodan_handler(request_rec *r)
 	}
 
 	if (cache_status == WODAN_CACHE_PRESENT) {
-		if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since")) != NULL) {
+		if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since"))) {
 			apr_time_t if_modified_since;
 			if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
-				if (cache_file_time <= if_modified_since)
+				if (cache_file_time <= if_modified_since) {
+					DEBUG("returning [304]");
 					return HTTP_NOT_MODIFIED;
+				}
 			}
 		}
 

@@ -285,6 +285,22 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 				return WODAN_CACHE_404;
 			}
 		}
+		while (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
+			if (strncasecmp(buffer, "Last-Modified", 13) == 0) {
+				if (strlen(buffer) > 40) {
+					apr_time_t last_modified;
+					if ((last_modified = apr_date_parse_http(buffer+14))) {
+						DEBUG("cache_file_time: %ld", apr_time_sec(last_modified));
+						*cache_file_time = last_modified;
+					}
+				}
+				break;
+			}
+
+			if ((strncmp(buffer, "\r\n", 2) == 0) || (strncmp(buffer,"\n",1) == 0))
+				break;
+		}
+
 
 		apr_file_close(cachefile);
 		return WODAN_CACHE_PRESENT;
