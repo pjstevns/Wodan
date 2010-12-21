@@ -420,10 +420,10 @@ static int receive_headers(apr_socket_t *socket, request_rec *r,
 		 * away in that case */
 		if (read_header == NULL)
 			return HTTP_BAD_GATEWAY;
-			
+
 		if (strcasecmp(read_header, CRLF) == 0)
 			break;
-		
+
 		len = 0;
 		if(strlen(read_header) == BUFFERSIZE - 1)
 		{
@@ -434,15 +434,15 @@ static int receive_headers(apr_socket_t *socket, request_rec *r,
 		}
 
 		if(header) { // we append the final bytes of header here
-            len = strlen(header);
-            header = (char *) realloc(header, (len + BUFFERSIZE));
-            header = strcat(header, read_header);
-        }
+			len = strlen(header);
+			header = (char *) realloc(header, (len + BUFFERSIZE));
+			header = strcat(header, read_header);
+		}
 
 		key = ap_getword(r->pool, header ? (const char **)&header: &read_header, ':');
 		val = apr_pstrdup(r->pool, header ? header : read_header);
 		val = util_skipspaces(val);
-		
+
 		// strip whitespace from start and end.
 		val_pos = 0;
 		while(val[val_pos]) {
@@ -460,8 +460,8 @@ static int receive_headers(apr_socket_t *socket, request_rec *r,
 	ap_reverseproxy_clear_connection(r->pool, httpresponse->headers);
 	adjust_dates(r, httpresponse);
 	httpresponse->headers = apr_table_overlay(r->pool, r->err_headers_out, 
-		httpresponse->headers);
-	
+			httpresponse->headers);
+
 	return OK;
 }
 
@@ -484,8 +484,7 @@ static int receive_body(wodan_config_t *config, apr_socket_t *socket,
 	while(1)
 	{
 		nr_bytes_read = connection_read_bytes(socket, r, buffer, BUFFERSIZE);
-		//nr_bytes_read = fread(buffer, sizeof(char), BUFFERSIZE, 
-		//		      connection->readstream);
+
 		DEBUG("read %d bytes from backend", nr_bytes_read);
 		
 		if (nr_bytes_read == -1) backend_read_error = 1;
@@ -493,9 +492,8 @@ static int receive_body(wodan_config_t *config, apr_socket_t *socket,
 		/* write to cache and check for errors */
 		if (cache_file) {
 			apr_size_t cache_bytes_written;
-			apr_file_write_full(cache_file, buffer, nr_bytes_read, 
-				&cache_bytes_written);
-			/* TODO check for ferror */
+			apr_file_write_full(cache_file, buffer, nr_bytes_read, &cache_bytes_written);
+
 			if ((int) cache_bytes_written < nr_bytes_read) {
 				cache_write_error = 1;
 				break;
@@ -558,6 +556,7 @@ static int receive_body(wodan_config_t *config, apr_socket_t *socket,
 
 	return OK;
 }
+
 static apr_socket_t* connection_open (wodan_config_t *config, char* host, int port, request_rec *r, int do_ssl UNUSED)
 {
 	apr_socket_t *socket;
@@ -615,10 +614,9 @@ int http_proxy (wodan_config_t *config, const char* proxyurl, char* uri,
 	
 	//Connect to proxyhost
 	socket = connection_open(config, desthost, destport, r, do_ssl);
-	if(socket == NULL)
-	{
+	if(socket == NULL) {
 		httpresponse->response = HTTP_BAD_GATEWAY;
-		return HTTP_BAD_GATEWAY;//TODO BAD_GATEWAY??
+		return HTTP_BAD_GATEWAY;
 	}
 
 	//Copy headers and make adjustments
