@@ -325,6 +325,17 @@ Running Wodan is really simple. Just start apache with:
 
 		<?php header("X-Wodan: expire 10m"); ?>
 
+
+	--------------
+        Expires header
+        --------------
+
+	In addition to this custom X-Wodan header, the standard Expires
+        header is also respected. X-Wodan will take precedence though.
+
+	Example:
+		Expires: Thu, 23 Dec 2010 10:03:15 GMT
+
 ----------------------
 9. Logging
 ----------------------

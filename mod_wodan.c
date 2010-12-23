@@ -383,8 +383,6 @@ static int wodan_handler(request_rec *r)
 		int l = (int) strlen(proxy_destination->path);
 		newpath = &(r->unparsed_uri[l - 1]);
 
-		DEBUG("No cache, getting content from remote url: %s path: %s", proxy_destination->url, newpath);
-
 		//Get the httpresponse from remote server	
 		response = http_proxy(config, proxy_destination->url, newpath, &httpresponse, r, cache_file_time);
 		/* If 404 are to be cached, then already return

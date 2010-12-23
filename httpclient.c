@@ -454,7 +454,7 @@ static int receive_headers(apr_socket_t *socket, request_rec *r,
 		}
 		apr_table_add(httpresponse->headers, key, val);
 		free(header);
-		DEBUG("Added header: \"%s\", value: \"%s\"", key, val);
+		DEBUG("Added response header: [%s: %s]", key, val);
 	}
 	/* adjust headers */
 	ap_reverseproxy_clear_connection(r->pool, httpresponse->headers);

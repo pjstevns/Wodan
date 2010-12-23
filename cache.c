@@ -4,6 +4,7 @@
 
 #include <sys/stat.h>
 #include <string.h>
+#include <assert.h>
 
 #include "cache.h"
 #include "datatypes.h"
@@ -221,6 +222,16 @@ static int get_cache_filename(wodan_config_t *config, request_rec *r, char **fil
 	return 1;
 }
 
+static float get_random_number(int max)
+{
+	assert(max > 0);
+	unsigned int seed = (unsigned int)(apr_time_now());
+	int r = rand_r(&seed) & max;
+	if (r)
+		return (float)1/(float)r;
+	return (float)r;
+}
+
 WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_time_t *cache_file_time)
 {
 	char* cachefilename;
@@ -254,6 +265,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 		interval_time = atoi(buffer);
 
 	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
+		float rand;
 		apr_time_t cachefile_expire_time;
 
 		/* Parses a date in RFC 822  */
@@ -265,11 +277,32 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 		/* time - interval_time = time that file was created */
 		*cache_file_time = cachefile_expire_time - apr_time_from_sec(interval_time);
 		ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
-		DEBUG("ttl [%ld]", ttl);
+
+		DEBUG("interval [%d], ttl [%ld]", interval_time, ttl);
 
 		if(ttl <= 0) {
 			apr_file_close(cachefile);
 			return WODAN_CACHE_PRESENT_EXPIRED;
+		}
+
+		// get a random number 
+		rand = get_random_number(100000);
+
+		if (ttl < (interval_time/10)) {
+			if (rand <= 0.001) {
+				apr_file_close(cachefile);
+				return WODAN_CACHE_PRESENT_EXPIRED;
+			}
+		} else if (ttl < (interval_time/5)) {
+			if (rand <= 0.0001) {
+				apr_file_close(cachefile);
+				return WODAN_CACHE_PRESENT_EXPIRED;
+			}
+		} else if (ttl < (interval_time/4)) {
+			if (rand <= 0.00005) {
+				apr_file_close(cachefile);
+				return WODAN_CACHE_PRESENT_EXPIRED;
+			}
 		}
 
 		if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
@@ -403,25 +436,22 @@ static apr_time_t parse_xwodan_expire(request_rec *r,
 				  int *cachetime_interval) 
 {
 	apr_time_t expire_time;
-	char *c;
+	char *expires, *c;
 
 	*cachetime_interval = 0;
-	DEBUG("Parsing expire header: \"%s\"", util_skipspaces(&xwodan[6]));
-	c = util_skipspaces(&xwodan[6]);
+	expires = util_skipspaces(&xwodan[6]);
+
+	DEBUG("Parsing expire header: \"%s\"", expires);
+	c = expires;
 	if ( *c >= '0' && *c <= '9' ) {
 		DEBUG("Expire header is numeric. Assuming addition of interval to current time.");
 		*cachetime_interval = util_timestring_to_seconds(c);
 		DEBUG("cachetime_interval = %d", *cachetime_interval);
 		expire_time = r->request_time + apr_time_from_sec(*cachetime_interval);
 	} else {
-		/* IB 2004-12-07: there's no information on this next 
-		 * piece of code
-		 * in  the README.. Is it safe to delete this or 
-		 * is there code that relies on it? */
-		expire_time = apr_date_parse_http(util_skipspaces(&xwodan[6]));
-		if (expire_time == APR_DATE_BAD) { 
+		if (! (expire_time = apr_date_parse_http(expires))) {
+			DEBUG("Invalid expire time, using default cache time");
 			expire_time = r->request_time + apr_time_from_sec(cachetime);
-			DEBUG("Received 0 expire time, using default cache time");
 		}	
 		DEBUG("Time: %ld", (long int) expire_time);
 		if(r->request_time > expire_time) {
@@ -553,12 +583,24 @@ static char *get_expire_time(wodan_config_t *config,
 				return NULL;
 			}
 		}
+		/* check X-Wodan header */
+	} else if (httpresponse && (expire_time_rfc822_string = (char *) apr_table_get(httpresponse->headers, "Expires")) != NULL) {
+		if (! (expire_time = apr_date_parse_http(expire_time_rfc822_string))) {
+			DEBUG("Expires header invalid [%s]", expire_time_rfc822_string);
+			expire_time_rfc822_string = NULL;
+		} else if(r->request_time > expire_time) {
+			DEBUG("Expires header in the past [%s]", expire_time_rfc822_string);
+			expire_time_rfc822_string = NULL;
+		} else {
+			DEBUG("Expires header [%s]", expire_time_rfc822_string);
+		}
+	
 	}
 
 	if (expire_time_rfc822_string == NULL) {
 		expire_time = r->request_time + apr_time_from_sec(cachetime);
 		*cachetime_interval = cachetime;
-		DEBUG("No expire-header found. Using default cache time" );
+		DEBUG("Using default cache time [%d]", cachetime);
 		expire_time_rfc822_string = apr_pcalloc(r->pool, APR_RFC822_DATE_LEN);
 		apr_rfc822_date(expire_time_rfc822_string, expire_time);
 	}
@@ -625,11 +667,19 @@ apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
 		return NULL;
 	}
 
-	if (r->method_number != M_GET || r->header_only || !is_response_cacheable(httpresponse->response, config->cache_404s)) {
-		DEBUG("Response isn't cacheable");
+	if (r->header_only) {
+		DEBUG("Response isn't cacheable: HEAD");
+		return NULL;
+	}
+	if (r->method_number != M_GET) {
+		DEBUG("Response isn't cacheable: !GET");
 		return NULL;
 	}
 	
+	if (!is_response_cacheable(httpresponse->response, config->cache_404s)) {
+		DEBUG("Response isn't cacheable: %d", httpresponse->response);
+		return NULL;
+	}
 	if ((char *) ap_strcasestr(r->unparsed_uri, "cache=no") != NULL)
 		return NULL;
 
