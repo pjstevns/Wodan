@@ -722,7 +722,7 @@ void cache_close_cachefile(wodan_config_t *config, request_rec *r, apr_file_t *t
 	create_cache_dir(config, r, dst);
 
 	apr_file_name_get(&src, temp_cachefile);
-	apr_file_copy(src, dst, APR_FILE_SOURCE_PERMS, r->pool);
+	apr_file_copy(src, dst, APR_UREAD|APR_UWRITE|APR_GREAD, r->pool);
 	apr_file_close(temp_cachefile);
 }		
 
