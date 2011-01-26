@@ -329,10 +329,6 @@ static int receive_complete_response(wodan_config_t *config,
 	if ((status = receive_status_line(socket, r, httpresponse)) == -1) 
 		return HTTP_BAD_GATEWAY;
 	
-	if (status == HTTP_NOT_FOUND) {
-		if (! config->cache_404s)
-			return status; /* = 404 */
-	}
 	if (status == HTTP_NOT_MODIFIED) /* = 304 */
 		return status;
 
