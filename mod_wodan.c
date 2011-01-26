@@ -366,16 +366,17 @@ static int wodan_handler(request_rec *r)
 	// see if the request can be handled from the cache.
 	cache_status = cache_get_status(config, r, &cache_file_time);
 
-	DEBUG("cache_get_status: %d", cache_status);
+	DEBUG("cache_get_status: %d cache404s: %s", cache_status, config->cache_404s?"On":"Off");
 
-	if ((config->cache_404s) && (cache_status == WODAN_CACHE_404)) {
-		DEBUG("URL is cached as 404");
-		return HTTP_NOT_FOUND;
-	}
-	
 	memset(&httpresponse, 0, sizeof(httpresponse_t));
 	httpresponse.headers = apr_table_make(r->pool, 0);
 
+	if ((config->cache_404s) && (cache_status == WODAN_CACHE_404)) {
+	  	cache_read_from_cache(config, r, &httpresponse);
+		DEBUG("Return cached 404");
+		return HTTP_NOT_FOUND;
+	}
+	
 	if (cache_status != WODAN_CACHE_PRESENT) {
 		/* attempt to get data from backend */
 
@@ -388,15 +389,14 @@ static int wodan_handler(request_rec *r)
 		/* If 404 are to be cached, then already return
 		 * default 404 page here in case of a 404. */
 		if ((config->cache_404s) && (response == HTTP_NOT_FOUND))
+			DEBUG("returning: %d", response);
 			return HTTP_NOT_FOUND;
-
 		/* if nothing can be received from backend, and there's
 		   nothing in cache, return the response code so
 		   ErrorDocument can handle it ... */
-		if ((response == HTTP_NOT_FOUND || ap_is_HTTP_SERVER_ERROR(response)) && cache_status != WODAN_CACHE_PRESENT_EXPIRED) {
+		if (((response == HTTP_NOT_FOUND) || ap_is_HTTP_SERVER_ERROR(response)) && (cache_status != WODAN_CACHE_PRESENT_EXPIRED)) {
 			if (config->run_on_cache)
 				response = HTTP_NOT_FOUND;
-
 			DEBUG("returning: %d", response);
 			return response;
 		} 
@@ -414,7 +414,6 @@ static int wodan_handler(request_rec *r)
 				}
 			}
 		}
-
 	  	cache_read_from_cache(config, r, &httpresponse);
 		apr_table_set(r->notes, "WodanSource", LOG_SOURCE_CACHED);
 	} else if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(response) || response == HTTP_NOT_MODIFIED)) {
@@ -426,7 +425,8 @@ static int wodan_handler(request_rec *r)
 	}
 
 	//Return some response code
-	DEBUG("returning: %d",  httpresponse.response);
+	DEBUG("httpresponse.response: %d",  httpresponse.response);
+	DEBUG("returning: %d", OK);
 	
 	return OK; 
 }

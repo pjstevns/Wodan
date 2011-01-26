@@ -308,14 +308,17 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 		if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 			status = atoi(buffer);
 			if (status == HTTP_NOT_FOUND) {
-				DEBUG("status [404]");
-				if (! config->cache_404s) {
-					const char *fname;
-					apr_file_name_get(&fname, cachefile);
-					apr_file_remove(fname, r->pool);
+				if (config->cache_404s) {
+					DEBUG("cache status [404] while Cache404s is On");
+					apr_file_close(cachefile);
+					return WODAN_CACHE_404;
 				}
+				DEBUG("unlink cached [404] while Cache404s is Off");
+				const char *fname;
+				apr_file_name_get(&fname, cachefile);
+				apr_file_remove(fname, r->pool);
 				apr_file_close(cachefile);
-				return WODAN_CACHE_404;
+				return WODAN_CACHE_NOT_PRESENT;
 			}
 		}
 		while (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
@@ -413,6 +416,8 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpre
 			break;
 	}
 
+	ap_rflush(r);
+
 	/* TODO add error checking for file reading */
 	if (write_error) {
 		const char *user_agent;
@@ -425,6 +430,7 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpre
 				"User-Agent: %s", body_bytes_written, content_length, user_agent);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
+	DEBUG("content-length: %d, body_bytes: %d", content_length, body_bytes_written);
 
 	DEBUG("%s OK", cachefilename);
 

@@ -341,7 +341,6 @@ static int receive_complete_response(wodan_config_t *config,
 	
 	if ((receive_headers_result = receive_headers(socket, r, httpresponse)) != OK) 
 		return receive_headers_result;
-		
 	
 	switch(status) {
 		case HTTP_OK:
