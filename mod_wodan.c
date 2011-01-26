@@ -391,9 +391,10 @@ static int wodan_handler(request_rec *r)
 
 		/* If 404 are to be cached, then already return
 		 * default 404 page here in case of a 404. */
-		if ((config->cache_404s) && (response == HTTP_NOT_FOUND))
+		if ((config->cache_404s) && (response == HTTP_NOT_FOUND)) {
 			DEBUG("returning: %d", response);
 			return HTTP_NOT_FOUND;
+		}
 		/* if nothing can be received from backend, and there's
 		   nothing in cache, return the response code so
 		   ErrorDocument can handle it ... */
