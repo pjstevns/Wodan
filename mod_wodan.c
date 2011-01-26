@@ -429,7 +429,6 @@ static int wodan_handler(request_rec *r)
 
 	//Return some response code
 	DEBUG("httpresponse.response: %d",  httpresponse.response);
-	DEBUG("returning: %d", OK);
 	
 	return OK; 
 }
