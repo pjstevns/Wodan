@@ -48,10 +48,13 @@ static int is_cachedir_set(wodan_config_t* config)
  * @retval 1 if return code is cachable
  * @retval 0 if return code is not cachable
  */
-static int is_response_cacheable (int httpcode, int cache404s)
+static inline int is_response_cacheable (int httpcode, int cache404s)
 {
 	if ( cache404s && (httpcode == 404))
 		return 1;
+
+	if ( httpcode == 304 )
+		return 0;
 
 	if ( (httpcode >= 200) && (httpcode < 400) )
 		return 1;
@@ -261,8 +264,17 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
 
 	/* read expire interval field */
-	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS)
-		interval_time = atoi(buffer);
+	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
+		if (! (interval_time = atoi(buffer))) {
+		
+			DEBUG("unlink cachefile with interval_time 0");
+			const char *fname;
+			apr_file_name_get(&fname, cachefile);
+			apr_file_remove(fname, r->pool);
+			apr_file_close(cachefile);
+			return WODAN_CACHE_NOT_PRESENT;
+		}
+	}
 
 	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 		float rand;
@@ -430,9 +442,7 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpre
 				"User-Agent: %s", body_bytes_written, content_length, user_agent);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
-	DEBUG("content-length: %d, body_bytes: %d", content_length, body_bytes_written);
-
-	DEBUG("%s OK", cachefilename);
+	DEBUG("%s OK content-length: %d, body_bytes: %d", cachefilename, content_length, body_bytes_written);
 
 	return 1;
 }
@@ -598,12 +608,13 @@ static char *get_expire_time(wodan_config_t *config,
 			DEBUG("Expires header in the past [%s]", expire_time_rfc822_string);
 			expire_time_rfc822_string = NULL;
 		} else {
-			DEBUG("Expires header [%s]", expire_time_rfc822_string);
+			*cachetime_interval = apr_time_sec((expire_time - r->request_time));
+			DEBUG("Expires header [%s] interval [%d]", expire_time_rfc822_string, *cachetime_interval);
 		}
 	
 	}
 
-	if (expire_time_rfc822_string == NULL) {
+	if ((expire_time_rfc822_string == NULL) || (*cachetime_interval == 0)) {
 		expire_time = r->request_time + apr_time_from_sec(cachetime);
 		*cachetime_interval = cachetime;
 		DEBUG("Using default cache time [%d]", cachetime);

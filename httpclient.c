@@ -329,9 +329,6 @@ static int receive_complete_response(wodan_config_t *config,
 	if ((status = receive_status_line(socket, r, httpresponse)) == -1) 
 		return HTTP_BAD_GATEWAY;
 	
-	if (status == HTTP_NOT_MODIFIED) /* = 304 */
-		return status;
-
 	if (ap_is_HTTP_SERVER_ERROR(status)) /* = 50x */
 		return status;
 	
@@ -341,6 +338,7 @@ static int receive_complete_response(wodan_config_t *config,
 	switch(status) {
 		case HTTP_OK:
 		case HTTP_NOT_FOUND: 
+		case HTTP_NOT_MODIFIED:
 		case HTTP_MOVED_PERMANENTLY:
 		case HTTP_MOVED_TEMPORARILY:
 		case HTTP_SEE_OTHER:

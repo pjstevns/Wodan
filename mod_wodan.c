@@ -386,6 +386,9 @@ static int wodan_handler(request_rec *r)
 
 		//Get the httpresponse from remote server	
 		response = http_proxy(config, proxy_destination->url, newpath, &httpresponse, r, cache_file_time);
+
+		DEBUG("gateway response: %d http_proxy returned: %d", httpresponse.response, response);
+
 		/* If 404 are to be cached, then already return
 		 * default 404 page here in case of a 404. */
 		if ((config->cache_404s) && (response == HTTP_NOT_FOUND))
@@ -401,7 +404,6 @@ static int wodan_handler(request_rec *r)
 			return response;
 		} 
 
-		DEBUG("Got response from gateway: %d", httpresponse.response);
 	}
 
 	if (cache_status == WODAN_CACHE_PRESENT) {
