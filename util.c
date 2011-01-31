@@ -238,12 +238,12 @@ const char* wodan_location_reverse_map(wodan_proxy_alias_t* alias, const char *u
 	
 	url_len = strlen(url);
 	alias_len = strlen(alias->alias);
-	DEBUG("Replacing %s with %s", url, alias->alias);
+	DEBUG("reverse map [%s] -> [%s]", url, alias->alias);
 	if (url_len >= alias_len && strncmp(alias->alias, url, alias_len) == 0) {
 		char *constructed_url, *result;
 		constructed_url = apr_pstrcat(r->pool, alias->path, &url[alias_len], NULL);
 		result = ap_construct_url(r->pool, constructed_url, r);
-		DEBUG("Replacing with %s", result);
+		DEBUG("result [%s]", result);
 		return (const char *)result;
 	}
 	else return url;

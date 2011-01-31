@@ -387,7 +387,7 @@ static int wodan_handler(request_rec *r)
 		//Get the httpresponse from remote server	
 		response = http_proxy(config, proxy_destination->url, newpath, &httpresponse, r, cache_file_time);
 
-		DEBUG("gateway response: %d http_proxy returned: %d", httpresponse.response, response);
+		DEBUG("http_proxy returned: %d", response);
 
 		/* If 404 are to be cached, then already return
 		 * default 404 page here in case of a 404. */
@@ -412,19 +412,15 @@ static int wodan_handler(request_rec *r)
 			apr_time_t if_modified_since;
 			if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
 				if (cache_file_time <= if_modified_since) {
-					DEBUG("returning [304]");
+					DEBUG("returning: 304");
 					return HTTP_NOT_MODIFIED;
 				}
 			}
 		}
 	  	cache_read_from_cache(config, r, &httpresponse);
-		apr_table_set(r->notes, "WodanSource", LOG_SOURCE_CACHED);
-	} else if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(response) || response == HTTP_NOT_MODIFIED)) {
+	} else if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(response) || (response == HTTP_NOT_MODIFIED))) {
 	  	cache_read_from_cache(config, r, &httpresponse);
 		cache_update_expiry_time(config, r);
-		apr_table_set(r->notes, "WodanSource", LOG_SOURCE_CACHED_BACKEND_ERROR);
-	} else {
-		apr_table_set(r->notes, "WodanSource", LOG_SOURCE_BACKEND);
 	}
 
 	//Return some response code

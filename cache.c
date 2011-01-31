@@ -56,7 +56,9 @@ static inline int is_response_cacheable (int httpcode, int cache404s)
 	if ( httpcode == 304 )
 		return 0;
 
-	if ( (httpcode >= 200) && (httpcode < 400) )
+	if (ap_is_HTTP_SUCCESS(httpcode))
+		return 1;
+	if (ap_is_HTTP_REDIRECT(httpcode))
 		return 1;
 
 	return 0;
@@ -338,7 +340,6 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 				if (strlen(buffer) > 40) {
 					apr_time_t last_modified;
 					if ((last_modified = apr_date_parse_http(buffer+14))) {
-						DEBUG("cache_file_time: %ld", apr_time_sec(last_modified));
 						*cache_file_time = last_modified;
 					}
 				}
