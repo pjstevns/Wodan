@@ -331,6 +331,9 @@ static int receive_complete_response(wodan_config_t *config,
 	
 	if (ap_is_HTTP_SERVER_ERROR(status)) /* = 50x */
 		return status;
+
+	if (status == HTTP_NOT_MODIFIED)
+		return status;
 	
 	if ((receive_headers_result = receive_headers(socket, r, httpresponse)) != OK) 
 		return receive_headers_result;
@@ -338,7 +341,6 @@ static int receive_complete_response(wodan_config_t *config,
 	switch(status) {
 		case HTTP_OK:
 		case HTTP_NOT_FOUND: 
-		case HTTP_NOT_MODIFIED:
 		case HTTP_MOVED_PERMANENTLY:
 		case HTTP_MOVED_TEMPORARILY:
 		case HTTP_SEE_OTHER:
