@@ -364,7 +364,6 @@ static int receive_status_line(apr_socket_t *socket, request_rec *r,
 {
 	const char *read_string;
 	const char *http_string, *status_string;
-	int status;
 
 	read_string = connection_read_string(socket, r);
 	if (read_string == NULL)
@@ -373,13 +372,9 @@ static int receive_status_line(apr_socket_t *socket, request_rec *r,
 	http_string = ap_getword_white(r->pool, &read_string);
 	status_string = ap_getword_white(r->pool, &read_string);
 	
-	DEBUG("statusstr = %s", status_string);
+	httpresponse->response = atoi(status_string);
 
-	status = atoi(status_string);
-	
-	httpresponse->response = status;
-
-	return status;
+	return httpresponse->response;
 }
 
 /** adjust dates to one form */
@@ -581,11 +576,31 @@ static apr_socket_t* connection_open (wodan_config_t *config, char* host, int po
 	return socket;
 }
 
+static wodan_proxy_destination_t* destination_longest_match(wodan_config_t *config, 
+	char *uri)
+{
+	wodan_proxy_destination_t *longest, *list;
+	int length, i;
+
+	longest = NULL;
+	length = 0;
+	list = (wodan_proxy_destination_t *) config->proxy_passes->elts;
+	for(i=0; i < config->proxy_passes->nelts; i++)
+	{
+		int l = (int) strlen(list[i].path);
+
+		if(l > length && strncmp(list[i].path, uri, l) == 0)
+		{
+			longest = &list[i];
+			length = l;
+		}
+	}
+	return longest;	
+}
 
 
-int http_proxy (wodan_config_t *config, const char* proxyurl, char* uri, 
-		   struct httpresponse* httpresponse, 
-		   request_rec *r, apr_time_t cache_file_time)
+
+int http_proxy (wodan_config_t *config, struct httpresponse* httpresponse, request_rec *r, apr_time_t cache_file_time)
 {
 	int result = OK;
 	char *desthost, *destpath;
@@ -597,12 +612,19 @@ int http_proxy (wodan_config_t *config, const char* proxyurl, char* uri,
 	apr_socket_t *socket;
 	int gdp_retval = 0;
 
-	if ((gdp_retval = get_destination_parts(p, proxyurl, uri,
-				  &desthost, &destport,
+	wodan_proxy_destination_t *proxy;
+
+	if (! (proxy = destination_longest_match(config, r->unparsed_uri)))
+		return DECLINED;
+
+	int l = (int) strlen(proxy->path);
+	char *uri = &(r->unparsed_uri[l - 1]);
+
+	if ((gdp_retval = get_destination_parts(p, proxy->url, uri, &desthost, &destport,
 				  &destpath, &dest_host_and_port,
 				  &do_ssl)) != 0) {
-		ERROR("failed to parse proxy_url %s and uri %s, retval = %d", proxyurl, uri, gdp_retval);
-		return 0;
+		ERROR("failed to parse proxy_url %s and uri %s, retval = %d", proxy->url, uri, gdp_retval);
+		return DECLINED;
 	}
 		
 	DEBUG("Destination: %s %d %s", desthost, destport, destpath);

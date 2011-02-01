@@ -117,8 +117,6 @@ typedef struct wodan_hash_header_match {
 	const char *pattern;
 } wodan_hash_header_match_t;
 
-
-
 /**
  * Structure representing an httpresponse
  */

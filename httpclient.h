@@ -26,7 +26,7 @@
  * @return The result code returned by the backend
  * 
  */
-int http_proxy (wodan_config_t *config, const char* host, char* uri, 
+int http_proxy (wodan_config_t *config,
 	struct httpresponse* httpresponse, request_rec *r, 
 	apr_time_t cache_file_time);
 
