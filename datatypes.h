@@ -66,7 +66,6 @@ typedef struct wodan_config {
 	
 	int cachedir_levels;
 } wodan_config_t;
-
 /**
  * Structure containing info about a ReverseProxyPass directive
  */
@@ -125,5 +124,14 @@ typedef struct httpresponse {
 	apr_table_t* headers;//A table containing the headers
 	int response;//The response code
 } httpresponse_t;
+
+typedef struct wodan_cache_state {
+	apr_time_t cache_file_time;
+	char *cachefilename;
+	wodan_config_t *config;
+	request_rec *r;
+	httpresponse_t *httpresponse;
+} cache_state_t;
+
 
 #endif //_DATATYPES_H_

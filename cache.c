@@ -237,16 +237,18 @@ static float get_random_number(int max)
 	return (float)r;
 }
 
-WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_time_t *cache_file_time)
+WodanCacheStatus_t cache_status(cache_state_t *cachestate)
 {
-	char* cachefilename;
+
 	apr_file_t *cachefile;
 	char buffer[BUFFERSIZE];
 	int status;
 	int interval_time = 0;
 	long int ttl;
-
-	*cache_file_time = (apr_time_t) 0;
+	wodan_config_t *config = cachestate->config;
+	request_rec *r = cachestate->r;
+	apr_time_t cache_file_time = cachestate->cache_file_time;
+	char ** cachefilename = &(cachestate->cachefilename);
 
 	if(r->method_number != M_GET && !r->header_only)
 		return WODAN_CACHE_NOT_CACHEABLE;
@@ -255,10 +257,10 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 	if (!is_cachedir_set(config))
 		return WODAN_CACHE_NOT_PRESENT;
 
-	if (! get_cache_filename(config, r, &cachefilename))
+	if (! get_cache_filename(config, r, cachefilename))
 		return WODAN_CACHE_NOT_CACHEABLE;
 
-	if (apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
+	if (apr_file_open(&cachefile, *cachefilename, APR_READ, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
 		return WODAN_CACHE_NOT_PRESENT;
 	}
 
@@ -289,7 +291,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 		}
 
 		/* time - interval_time = time that file was created */
-		*cache_file_time = cachefile_expire_time - apr_time_from_sec(interval_time);
+		cache_file_time = cachefile_expire_time - apr_time_from_sec(interval_time);
 		ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
 
 		DEBUG("interval [%d], ttl [%ld]", interval_time, ttl);
@@ -340,7 +342,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 				if (strlen(buffer) > 40) {
 					apr_time_t last_modified;
 					if ((last_modified = apr_date_parse_http(buffer+14))) {
-						*cache_file_time = last_modified;
+						cache_file_time = last_modified;
 					}
 				}
 				break;
@@ -358,19 +360,31 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, apr_
 	return WODAN_CACHE_NOT_PRESENT;
 }
 
-int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpresponse* httpresponse)
+int cache_read(cache_state_t *cachestate)
 {
-	char* cachefilename;
 	apr_file_t *cachefile;
 	char buffer[BUFFERSIZE];
 	int write_error;
 	int content_length = 0;
 	int body_bytes_written = 0;
 	
-	if (! get_cache_filename(config, r, &cachefilename))
-		return 0;
+	wodan_config_t *config = cachestate->config;
+	request_rec *r = cachestate->r;
+	httpresponse_t *httpresponse = cachestate->httpresponse;
+	char **cachefilename = &(cachestate->cachefilename);
 
-	apr_file_open(&cachefile, cachefilename, APR_READ, APR_OS_DEFAULT, r->pool);
+	const char *ifmodsince;
+	if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since"))) {
+		apr_time_t if_modified_since;
+		if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
+			if (cachestate->cache_file_time <= if_modified_since) {
+				httpresponse->response = HTTP_NOT_MODIFIED;
+				return 0;
+			}
+		}
+	}
+
+	apr_file_open(&cachefile, *cachefilename, APR_READ, APR_OS_DEFAULT, r->pool);
 	/* Read url field, but we don't do anything with it */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
 	/* same for expire interval field */
@@ -383,7 +397,7 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpre
 	} else {
 		//Remove file and return 0
 		apr_file_close(cachefile);
-		apr_file_remove(cachefilename, r->pool);
+		apr_file_remove(*cachefilename, r->pool);
 		return 0;
 	}
 
@@ -443,7 +457,7 @@ int cache_read_from_cache (wodan_config_t *config, request_rec *r, struct httpre
 				"User-Agent: %s", body_bytes_written, content_length, user_agent);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
-	DEBUG("%s OK content-length: %d, body_bytes: %d", cachefilename, content_length, body_bytes_written);
+	DEBUG("%s OK content-length: %d, body_bytes: %d", *cachefilename, content_length, body_bytes_written);
 
 	return 1;
 }

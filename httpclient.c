@@ -608,10 +608,13 @@ static wodan_proxy_destination_t* destination_longest_match(wodan_config_t *conf
 	return longest;	
 }
 
-
-
-int http_proxy (wodan_config_t *config, struct httpresponse* httpresponse, request_rec *r, apr_time_t cache_file_time)
+int cache_update (cache_state_t *cachestate)
 {
+	wodan_config_t *config = cachestate->config;
+	request_rec *r = cachestate->r;
+	httpresponse_t *httpresponse = cachestate->httpresponse;
+	apr_time_t cache_file_time = cachestate->cache_file_time;
+
 	int result = OK;
 	char *desthost, *destpath;
 	char *dest_host_and_port;

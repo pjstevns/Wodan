@@ -37,8 +37,7 @@ typedef enum {
  *      - WODAN_CACHE_NOT_CACHEABLE for requests that cannot be cached
  *      - WODAN_CACHE_404 for requests that are cached as a 404 (not found)
  */
-WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r, 
-	apr_time_t *cache_file_time);
+WodanCacheStatus_t cache_status(cache_state_t *);
 
 /**
  * Look whether the request can be handled from the cache.
@@ -47,8 +46,7 @@ WodanCacheStatus_t cache_get_status(wodan_config_t *config, request_rec *r,
  * @param httpresponse The httpresponse record the data should be set in
  * @return 1 of request can be handled from cache 0 otherwise
  */
-int cache_read_from_cache (wodan_config_t *config, request_rec *r, 
-	struct httpresponse* httpresponse);
+int cache_read(cache_state_t *);
 
 /**
  * get cache file

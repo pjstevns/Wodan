@@ -329,21 +329,23 @@ static int wodan_handler(request_rec *r)
 {
 	wodan_config_t* config;
 	httpresponse_t httpresponse;
-	WodanCacheStatus_t cache_status;
-	apr_time_t cache_file_time;
+	WodanCacheStatus_t status;
+	cache_state_t cachestate;
 	
-	memset(&httpresponse, 0, sizeof(httpresponse_t));
-	httpresponse.headers = apr_table_make(r->pool, 0);
-
 	DEBUG("Processing new request: %s%s", r->hostname, r->unparsed_uri);
 
+	memset(&cachestate, 0, sizeof(cache_state_t));
 	config = (wodan_config_t *)ap_get_module_config(r->server->module_config, &wodan_module);
+	httpresponse.headers = apr_table_make(r->pool, 0);
+
+	cachestate.httpresponse = &httpresponse;
+	cachestate.config = config;
+	cachestate.r = r;
 
 	// see if the request can be handled from the cache.
-	cache_status = cache_get_status(config, r, &cache_file_time);
+	status = cache_status(&cachestate);
 
-	DEBUG("cache_get_status: %d cache404s: %s", cache_status, config->cache_404s?"On":"Off");
-	switch (cache_status) {
+	switch (status) {
 		/*
 		   WODAN_CACHE_PRESENT,         // present and fresh 
 		   WODAN_CACHE_PRESENT_EXPIRED, // present but expired
@@ -352,30 +354,15 @@ static int wodan_handler(request_rec *r)
 		   WODAN_CACHE_404              // cached 404
 		   */
 		case WODAN_CACHE_404:
-			cache_read_from_cache(config, r, &httpresponse);
-			break;
-		
 		case WODAN_CACHE_PRESENT:
-			{
-				const char *ifmodsince;
-				if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since"))) {
-					apr_time_t if_modified_since;
-					if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
-						if (cache_file_time <= if_modified_since) {
-							httpresponse.response = HTTP_NOT_MODIFIED;
-							break;
-						}
-					}
-				}
-				cache_read_from_cache(config, r, &httpresponse);
-				break;
-			}
+			cache_read(&cachestate);
+			break;
 
 		case WODAN_CACHE_NOT_PRESENT:
 		case WODAN_CACHE_NOT_CACHEABLE:
 		case WODAN_CACHE_PRESENT_EXPIRED:
 			//Get the httpresponse from remote server	
-			if ((http_proxy(config, &httpresponse, r, cache_file_time) == DECLINED))
+			if ((cache_update(&cachestate) == DECLINED))
 				return DECLINED;
 
 			/* If 404 are to be cached, then already return
@@ -386,15 +373,15 @@ static int wodan_handler(request_rec *r)
 			/* if nothing can be received from backend, and there's
 			   nothing in cache, return the response code so
 			   ErrorDocument can handle it ... */
-			if (cache_status != WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_FOUND))) {
+			if (status != WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_FOUND))) {
 				if (config->run_on_cache)
 					httpresponse.response = HTTP_NOT_FOUND;
 				break;
 			}
 
-			if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_MODIFIED))) {
+			if (status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_MODIFIED))) {
 				cache_update_expiry_time(config, r);
-				cache_read_from_cache(config, r, &httpresponse);
+				cache_read(&cachestate);
 				httpresponse.response = HTTP_OK;
 				break;
 			}
