@@ -354,7 +354,7 @@ static int wodan_handler(request_rec *r)
 		   */
 		case WODAN_CACHE_404:
 			cache_read_from_cache(config, r, &httpresponse);
-			return httpresponse.response;
+			break;
 		
 		case WODAN_CACHE_PRESENT:
 			{
@@ -362,8 +362,10 @@ static int wodan_handler(request_rec *r)
 				if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since"))) {
 					apr_time_t if_modified_since;
 					if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
-						if (cache_file_time <= if_modified_since)
-							return HTTP_NOT_MODIFIED;
+						if (cache_file_time <= if_modified_since) {
+							httpresponse.response = HTTP_NOT_MODIFIED;
+							break;
+						}
 					}
 				}
 				cache_read_from_cache(config, r, &httpresponse);
@@ -402,6 +404,9 @@ static int wodan_handler(request_rec *r)
 	}
 	//Return some response code
 	DEBUG("return: %d, httpresponse.response: %d",  OK, httpresponse.response);
+
+	// better safe than sorry
+	r->status = httpresponse.response;
 	
 	return OK; 
 }
