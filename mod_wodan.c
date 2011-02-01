@@ -327,7 +327,6 @@ static int wodan_init_handler(apr_pool_t *p,
 
 static int wodan_handler(request_rec *r)
 {
-	int response = HTTP_BAD_GATEWAY;
 	wodan_config_t* config;
 	httpresponse_t httpresponse;
 	WodanCacheStatus_t cache_status;
@@ -376,10 +375,10 @@ static int wodan_handler(request_rec *r)
 		case WODAN_CACHE_NOT_CACHEABLE:
 		case WODAN_CACHE_PRESENT_EXPIRED:
 			//Get the httpresponse from remote server	
-			if ((response = http_proxy(config, &httpresponse, r, cache_file_time) == DECLINED))
+			if ((http_proxy(config, &httpresponse, r, cache_file_time) == DECLINED))
 				return DECLINED;
 
-			DEBUG("http_proxy returned: %d, httpresonse.response: %d", response, httpresponse.response);
+			DEBUG("http_proxy returned: %d, httpresonse.response: %d", httpresponse.response);
 
 			/* If 404 are to be cached, then already return
 			 * default 404 page here in case of a 404. */
@@ -389,13 +388,13 @@ static int wodan_handler(request_rec *r)
 			/* if nothing can be received from backend, and there's
 			   nothing in cache, return the response code so
 			   ErrorDocument can handle it ... */
-			if (cache_status != WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(response) || (httpresponse.response == HTTP_NOT_FOUND))) {
+			if (cache_status != WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_FOUND))) {
 				if (config->run_on_cache)
 					httpresponse.response = HTTP_NOT_FOUND;
 				break;
 			}
 
-			if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(response) || (httpresponse.response == HTTP_NOT_MODIFIED))) {
+			if (cache_status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_MODIFIED))) {
 				cache_update_expiry_time(config, r);
 				cache_read_from_cache(config, r, &httpresponse);
 				httpresponse.response = HTTP_OK;

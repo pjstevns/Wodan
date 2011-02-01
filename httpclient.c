@@ -321,22 +321,30 @@ static int receive_complete_response(wodan_config_t *config,
 	apr_socket_t *socket, request_rec *r, 
 	httpresponse_t *httpresponse) 
 {
-	int status;
+	int status = OK;
 	int receive_headers_result;
 	int receive_body_result;
 	apr_file_t *cache_file = NULL;
 
-	if ((status = receive_status_line(socket, r, httpresponse)) == -1) 
+	if ((status = receive_status_line(socket, r, httpresponse)) == -1) {
+		httpresponse->response = HTTP_BAD_GATEWAY;
 		return HTTP_BAD_GATEWAY;
+	}
 	
-	if (ap_is_HTTP_SERVER_ERROR(status)) /* = 50x */
+	if (ap_is_HTTP_SERVER_ERROR(status)) { /* = 50x */
+		httpresponse->response = HTTP_BAD_GATEWAY;
 		return status;
+	}
 
-	if (status == HTTP_NOT_MODIFIED)
+	if (status == HTTP_NOT_MODIFIED) {
+		httpresponse->response = status;
 		return status;
+	}
 	
-	if ((receive_headers_result = receive_headers(socket, r, httpresponse)) != OK) 
+	if ((receive_headers_result = receive_headers(socket, r, httpresponse))) {
+		httpresponse->response = HTTP_BAD_GATEWAY;
 		return receive_headers_result;
+	}
 	
 	switch(status) {
 		case HTTP_OK:
@@ -353,8 +361,10 @@ static int receive_complete_response(wodan_config_t *config,
 
 	adjust_headers_for_sending(config, r, httpresponse);
 	
-	if ((receive_body_result = receive_body(config, socket, r, httpresponse, cache_file)) != OK)
+	if ((receive_body_result = receive_body(config, socket, r, httpresponse, cache_file))) {
+		httpresponse->response = HTTP_BAD_GATEWAY;
 		return receive_body_result;
+	}
 
 	return status;
 }
