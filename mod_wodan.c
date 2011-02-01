@@ -378,8 +378,6 @@ static int wodan_handler(request_rec *r)
 			if ((http_proxy(config, &httpresponse, r, cache_file_time) == DECLINED))
 				return DECLINED;
 
-			DEBUG("http_proxy returned: %d, httpresonse.response: %d", httpresponse.response);
-
 			/* If 404 are to be cached, then already return
 			 * default 404 page here in case of a 404. */
 			if ((config->cache_404s) && (httpresponse.response == HTTP_NOT_FOUND))
