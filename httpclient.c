@@ -45,18 +45,15 @@ static int send_headers(apr_socket_t *socket, request_rec *r, const apr_table_t 
  * @param httpresponse will hold response.
  * @return status, or -1 if no response
  */
-static int receive_status_line(apr_socket_t *socket, request_rec *r,
-			struct httpresponse *httpresponse);
+static int receive_status_line(cache_state_t *, apr_socket_t *);
 
 /**
  * receive headers from backend
  */
-static int receive_headers(apr_socket_t *socket, request_rec *r,
-		     struct httpresponse *httpresponse);
+static int receive_headers(cache_state_t *, apr_socket_t *);
 
 /** receive the body of the response from the backend */
-static int receive_body(wodan_config_t *config, apr_socket_t *socket, 
-	request_rec *r, httpresponse_t *httpresponse, apr_file_t *cache_file);
+static int receive_body(cache_state_t *, apr_socket_t *, apr_file_t *);
 
 /**
  * Remove all connection based header from the table
@@ -215,10 +212,12 @@ static void add_x_headers(const request_rec *r,
  * @param modified_time last modified time in cache
  */
 
-static int send_complete_request(apr_socket_t *socket, request_rec *r, 
-		const char *dest_host_and_port, const char *dest_path, apr_table_t *out_headers,
-		apr_time_t modified_time) {
+static int send_complete_request(cache_state_t *cachestate, apr_socket_t *socket,
+		const char *dest_host_and_port, const char *dest_path, apr_table_t *out_headers)
+{
 	int result;
+	request_rec *r = cachestate->r;
+	apr_time_t modified_time = cachestate->cache_file_time;
 
 	if(send_request(socket, r, dest_host_and_port, dest_path, modified_time) < 0)
 		return -1;
@@ -311,16 +310,16 @@ static int send_headers(apr_socket_t *socket, request_rec *r, const apr_table_t 
  * @param httpresponse will hold response
  * @return OK if finished
  */
-static int receive_complete_response(wodan_config_t *config, 
-	apr_socket_t *socket, request_rec *r, 
-	httpresponse_t *httpresponse) 
+static int receive_complete_response(cache_state_t *cachestate, apr_socket_t *socket)
 {
 	int status = OK;
 	int receive_headers_result;
 	int receive_body_result;
 	apr_file_t *cache_file = NULL;
 
-	if ((status = receive_status_line(socket, r, httpresponse)) == -1) {
+	httpresponse_t *httpresponse = cachestate->httpresponse;
+
+	if ((status = receive_status_line(cachestate, socket)) == -1) {
 		httpresponse->response = HTTP_BAD_GATEWAY;
 		return HTTP_BAD_GATEWAY;
 	}
@@ -335,7 +334,7 @@ static int receive_complete_response(wodan_config_t *config,
 		return status;
 	}
 	
-	if ((receive_headers_result = receive_headers(socket, r, httpresponse))) {
+	if ((receive_headers_result = receive_headers(cachestate, socket))) {
 		httpresponse->response = HTTP_BAD_GATEWAY;
 		return receive_headers_result;
 	}
@@ -346,16 +345,16 @@ static int receive_complete_response(wodan_config_t *config,
 		case HTTP_MOVED_PERMANENTLY:
 		case HTTP_MOVED_TEMPORARILY:
 		case HTTP_SEE_OTHER:
-			cache_file = cache_get_cachefile(config, r, httpresponse);
+			cache_file = cache_get_cachefile(cachestate);
 			break;
 		default:
 			cache_file = (apr_file_t *)NULL;
 			break;
 	}
 
-	adjust_headers_for_sending(config, r, httpresponse);
+	adjust_headers_for_sending(cachestate);
 	
-	if ((receive_body_result = receive_body(config, socket, r, httpresponse, cache_file))) {
+	if ((receive_body_result = receive_body(cachestate, socket, cache_file))) {
 		httpresponse->response = HTTP_BAD_GATEWAY;
 		return receive_body_result;
 	}
@@ -363,11 +362,13 @@ static int receive_complete_response(wodan_config_t *config,
 	return status;
 }
 
-static int receive_status_line(apr_socket_t *socket, request_rec *r,
-	httpresponse_t *httpresponse)
+static int receive_status_line(cache_state_t *cachestate, apr_socket_t *socket)
 {
 	const char *read_string;
 	const char *http_string, *status_string;
+
+	request_rec *r = cachestate->r;
+	httpresponse_t *httpresponse = cachestate->httpresponse;
 
 	read_string = connection_read_string(socket, r);
 	if (read_string == NULL)
@@ -382,24 +383,22 @@ static int receive_status_line(apr_socket_t *socket, request_rec *r,
 }
 
 /** adjust dates to one form */
-static void adjust_dates(request_rec *r, struct httpresponse *httpresponse) 
+static void adjust_dates(cache_state_t *cachestate)
 {
 	const char* datestr = NULL;
+	request_rec *r = cachestate->r;
+	httpresponse_t *httpresponse = cachestate->httpresponse;
+
 	if ((datestr = apr_table_get(httpresponse->headers, "Date")) != NULL)
-		apr_table_set(httpresponse->headers, "Date", 
-			wodan_date_canon(r->pool, datestr));
-	if ((datestr = apr_table_get(httpresponse->headers, "Last-Modified")) 
-	    != NULL)
-		apr_table_set(httpresponse->headers, "Last-Modified", 
-			wodan_date_canon(r->pool, datestr));
+		apr_table_set(httpresponse->headers, "Date", wodan_date_canon(r->pool, datestr));
+	if ((datestr = apr_table_get(httpresponse->headers, "Last-Modified")) != NULL)
+		apr_table_set(httpresponse->headers, "Last-Modified", wodan_date_canon(r->pool, datestr));
 	if ((datestr = apr_table_get(httpresponse->headers, "Expires")) != NULL)
-		apr_table_set(httpresponse->headers, "Expires",
-			wodan_date_canon(r->pool, datestr));
+		apr_table_set(httpresponse->headers, "Expires", wodan_date_canon(r->pool, datestr));
 }
 
 
-static int receive_headers(apr_socket_t *socket, request_rec *r,
-		    struct httpresponse *httpresponse)
+static int receive_headers(cache_state_t *cachestate, apr_socket_t *socket)
 {
 	const char *read_header;
 	char *header; // only used as a workaround for when read_header is
@@ -408,6 +407,9 @@ static int receive_headers(apr_socket_t *socket, request_rec *r,
 	char *key, *val;
 	int val_pos, len;
 	
+	request_rec *r = cachestate->r;
+	httpresponse_t *httpresponse = cachestate->httpresponse;
+
 	header = 0;
 	while((read_header = connection_read_string(socket, r))) {
 		/* if read_header is NULL, this signals an error. Escape from here right
@@ -419,9 +421,9 @@ static int receive_headers(apr_socket_t *socket, request_rec *r,
 			break;
 
 		len = 0;
-		if(strlen(read_header) == BUFFERSIZE - 1)
-		{
-			if(header) len = strlen(header);
+		if(strlen(read_header) == BUFFERSIZE - 1) {
+			if(header) 
+				len = strlen(header);
 			header = (char *) realloc(header, (len + BUFFERSIZE));
 			header = strncat(header, read_header, BUFFERSIZE);
 			continue;
@@ -452,21 +454,24 @@ static int receive_headers(apr_socket_t *socket, request_rec *r,
 	}
 	/* adjust headers */
 	ap_reverseproxy_clear_connection(r->pool, httpresponse->headers);
-	adjust_dates(r, httpresponse);
+	adjust_dates(cachestate);
 	httpresponse->headers = apr_table_overlay(r->pool, r->err_headers_out, 
 			httpresponse->headers);
 
 	return OK;
 }
 
-static int receive_body(wodan_config_t *config, apr_socket_t *socket, 
-	request_rec *r, httpresponse_t *httpresponse, apr_file_t *cache_file)
+static int receive_body(cache_state_t *cachestate, apr_socket_t *socket, apr_file_t *cache_file)
 {
 	char *buffer;
 	int nr_bytes_read;
 	int writtenbytes;
 	int body_bytes_written;
 	int backend_read_error, client_write_error, cache_write_error;
+
+	wodan_config_t *config = cachestate->config;
+	request_rec *r = cachestate->r;
+	httpresponse_t *httpresponse = cachestate->httpresponse;
 
 	buffer = apr_pcalloc(r->pool, BUFFERSIZE);
 
@@ -551,10 +556,12 @@ static int receive_body(wodan_config_t *config, apr_socket_t *socket,
 	return OK;
 }
 
-static apr_socket_t* connection_open (wodan_config_t *config, char* host, int port, request_rec *r, int do_ssl UNUSED)
+static apr_socket_t* connection_open (cache_state_t *cachestate, char* host, int port, int do_ssl UNUSED)
 {
 	apr_socket_t *socket;
 	apr_sockaddr_t *server_address;
+	wodan_config_t *config = cachestate->config;
+	request_rec *r = cachestate->r;
 	
 	DEBUG("Looking up host %s", host);
 	if (apr_sockaddr_info_get(&server_address, host, APR_UNSPEC, port, 0, r->pool) != APR_SUCCESS) {
@@ -580,10 +587,11 @@ static apr_socket_t* connection_open (wodan_config_t *config, char* host, int po
 	return socket;
 }
 
-static wodan_proxy_destination_t* destination_longest_match(wodan_config_t *config, 
-	char *uri)
+static wodan_proxy_destination_t* destination_longest_match(cache_state_t *cachestate)
 {
 	wodan_proxy_destination_t *longest, *list;
+	wodan_config_t *config = cachestate->config;
+	char *uri = cachestate->r->unparsed_uri;
 	int length, i;
 
 	longest = NULL;
@@ -593,8 +601,7 @@ static wodan_proxy_destination_t* destination_longest_match(wodan_config_t *conf
 	{
 		int l = (int) strlen(list[i].path);
 
-		if(l > length && strncmp(list[i].path, uri, l) == 0)
-		{
+		if(l > length && strncmp(list[i].path, uri, l) == 0) {
 			longest = &list[i];
 			length = l;
 		}
@@ -604,10 +611,8 @@ static wodan_proxy_destination_t* destination_longest_match(wodan_config_t *conf
 
 int cache_update (cache_state_t *cachestate)
 {
-	wodan_config_t *config = cachestate->config;
 	request_rec *r = cachestate->r;
 	httpresponse_t *httpresponse = cachestate->httpresponse;
-	apr_time_t cache_file_time = cachestate->cache_file_time;
 
 	int result = OK;
 	char *desthost, *destpath;
@@ -617,27 +622,26 @@ int cache_update (cache_state_t *cachestate)
 	apr_pool_t* p = r->pool;
 	apr_table_t *out_headers;
 	apr_socket_t *socket;
-	int gdp_retval = 0;
 
 	wodan_proxy_destination_t *proxy;
 
-	if (! (proxy = destination_longest_match(config, r->unparsed_uri)))
+	if (! (proxy = destination_longest_match(cachestate)))
 		return DECLINED;
 
 	int l = (int) strlen(proxy->path);
 	char *uri = &(r->unparsed_uri[l - 1]);
 
-	if ((gdp_retval = get_destination_parts(p, proxy->url, uri, &desthost, &destport,
+	if (get_destination_parts(p, proxy->url, uri, &desthost, &destport,
 				  &destpath, &dest_host_and_port,
-				  &do_ssl)) != 0) {
-		ERROR("failed to parse proxy_url %s and uri %s, retval = %d", proxy->url, uri, gdp_retval);
+				  &do_ssl)) {
+		ERROR("failed to parse proxy_url %s and uri %s", proxy->url, uri);
 		return DECLINED;
 	}
 		
 	DEBUG("Destination: %s %d %s", desthost, destport, destpath);
 	
 	//Connect to proxyhost
-	socket = connection_open(config, desthost, destport, r, do_ssl);
+	socket = connection_open(cachestate, desthost, destport, do_ssl);
 	if(socket == NULL) {
 		httpresponse->response = HTTP_BAD_GATEWAY;
 		return HTTP_BAD_GATEWAY;
@@ -648,13 +652,13 @@ int cache_update (cache_state_t *cachestate)
 	ap_reverseproxy_clear_connection(p, out_headers);
 	
 	/* send request */
-	if (send_complete_request(socket, r, dest_host_and_port, destpath, out_headers, cache_file_time) == -1) {
+	if (send_complete_request(cachestate, socket, dest_host_and_port, destpath, out_headers) == -1) {
 		apr_socket_close(socket);
 		httpresponse->response = HTTP_BAD_GATEWAY;
 		return HTTP_BAD_GATEWAY;
 	}	
 	
-	result = receive_complete_response(config, socket, r, httpresponse);
+	result = receive_complete_response(cachestate, socket);
 
 	apr_socket_close(socket);
 

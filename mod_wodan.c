@@ -371,7 +371,7 @@ static int wodan_handler(request_rec *r)
 			}
 
 			if (status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_MODIFIED))) {
-				cache_update_expiry_time(config, r);
+				cache_update_expiry_time(&cachestate);
 				cache_read(&cachestate);
 				httpresponse.response = HTTP_OK;
 				break;

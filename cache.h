@@ -67,8 +67,7 @@ int cache_update(cache_state_t *);
  * @retval NULL if not being cached
  * @retval apr_file_t pointer otherwise.
  */
-apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
-	struct httpresponse *httpresponse);
+apr_file_t *cache_get_cachefile(cache_state_t *);
 
 /**
  * close the cache file.
@@ -84,5 +83,5 @@ void cache_close_cachefile(wodan_config_t *config, request_rec *r,
  * @param r request_rec
  * @param config the wodan configuration
  */
-int cache_update_expiry_time(wodan_config_t *config, request_rec *r);
+int cache_update_expiry_time(cache_state_t *);
 #endif

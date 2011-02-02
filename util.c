@@ -159,9 +159,13 @@ char* util_skipspaces (char* input)
 	return input;
 }
 
-void adjust_headers_for_sending(wodan_config_t *config, request_rec *r, 
-	httpresponse_t *httpresponse)
+void adjust_headers_for_sending(cache_state_t *cachestate)
 {
+
+	wodan_config_t *config = cachestate->config;
+	request_rec *r = cachestate->r;
+	httpresponse_t *httpresponse = cachestate->httpresponse;
+
 	/* do more adjustments to the headers. This used to be in 
 	   mod_reverseproxy.c */
 	apr_table_unset(httpresponse->headers, "X-Wodan");

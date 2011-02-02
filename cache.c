@@ -368,7 +368,6 @@ int cache_read(cache_state_t *cachestate)
 	int content_length = 0;
 	int body_bytes_written = 0;
 	
-	wodan_config_t *config = cachestate->config;
 	request_rec *r = cachestate->r;
 	httpresponse_t *httpresponse = cachestate->httpresponse;
 	char **cachefilename = &(cachestate->cachefilename);
@@ -421,7 +420,8 @@ int cache_read(cache_state_t *cachestate)
 		if (strncasecmp(key, "Content-Length", 14) == 0)
 			content_length = atoi(bufferpointer);
 	}
-	adjust_headers_for_sending(config, r, httpresponse);
+
+	adjust_headers_for_sending(cachestate);
 
 	if(r->header_only)
 		return 1;
@@ -685,8 +685,7 @@ static int write_preamble(apr_file_t *cachefile, request_rec *r,
 	return 0;
 }
 
-apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r, 
-	struct httpresponse *httpresponse)
+apr_file_t *cache_get_cachefile(cache_state_t *cachestate)
 {
 	apr_file_t *cache_file = NULL;
 	char *expire = NULL;
@@ -694,6 +693,10 @@ apr_file_t *cache_get_cachefile(wodan_config_t *config, request_rec *r,
 	char *tempfile_template;
 	char *temp_dir;	
 	
+	wodan_config_t *config = cachestate->config;
+	request_rec *r = cachestate->r;
+	httpresponse_t *httpresponse = cachestate->httpresponse;
+
 	if(!is_cachedir_set(config)) {
 		ERROR("cachedir not set.");
 		return NULL;
@@ -758,8 +761,11 @@ void cache_close_cachefile(wodan_config_t *config, request_rec *r, apr_file_t *t
 	apr_file_close(temp_cachefile);
 }		
 
-int cache_update_expiry_time(wodan_config_t *config, request_rec *r) 
+int cache_update_expiry_time(cache_state_t *cachestate)
 {
+
+	wodan_config_t *config = cachestate->config;
+	request_rec *r = cachestate->r;
 	char *cachefilename;
 	int expire_interval;
 	long int expire_time;

@@ -58,8 +58,7 @@ char* util_skipspaces (char* input);
  * @param r request_rec
  * @param httpresponse response from backend.
  */
-void adjust_headers_for_sending(wodan_config_t *config, request_rec *r, 
-	httpresponse_t *httpresponse);
+void adjust_headers_for_sending(cache_state_t *);
 
 /**
  * convert a date to an rfc822 date string.
