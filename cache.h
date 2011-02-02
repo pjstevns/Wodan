@@ -5,9 +5,7 @@
 #ifndef CACHE_H
 #define CACHE_H
 
-#include <time.h>
 #include "datatypes.h"
-#include "apr_time.h"
 
 /**
  * This is used when allocating buffers to work with
@@ -47,6 +45,19 @@ WodanCacheStatus_t cache_status(cache_state_t *);
  * @return 1 of request can be handled from cache 0 otherwise
  */
 int cache_read(cache_state_t *);
+
+/**
+ * Method that connects to the backend and gets data from it
+ * @param host The ReverseProxyPass url
+ * @param httpresponse The httpresponse structure to put the data in
+ * @param r The request record
+ * @param cache_file_time creation time of cache file (or (time_t) 0 if there's
+ * 		no cache file.
+ * @return The result code returned by the backend
+ * 
+ */
+int cache_update(cache_state_t *);
+
 
 /**
  * get cache file

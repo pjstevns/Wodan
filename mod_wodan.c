@@ -1,10 +1,10 @@
 /* 
  * (c) 2000-2006 IC&S, The Netherlands
- * (c) 2008-2010 NFG, The Netherlands
+ * (c) 2008-2011 NFG, The Netherlands, paul@nfg.nl
  */ 
 
 #define WODAN_NAME "Wodan"
-#define WODAN_VERSION "2.0.1"
+#define WODAN_VERSION "2.2.0"
 
 /* constants identifying the source of the returned (to the client) object */
 #define LOG_SOURCE_CACHED "Cached"
@@ -14,19 +14,11 @@
 /* local includes */
 #include "cache.h"
 #include "datatypes.h"
-#include "httpclient.h"
 #include "util.h"
 
-/* Apache includes */
-#include "httpd.h"
 #include "http_config.h"
 #include "http_log.h"
-#include "http_protocol.h"
-#include "ap_config.h"
 #include "apr_strings.h"
-#include "apr_date.h"
-#include <string.h>
-#include <time.h>
 
 module AP_MODULE_DECLARE_DATA wodan_module;
 
@@ -61,19 +53,19 @@ static void *wodan_merge_config(apr_pool_t *p, void *base_config_p, void *new_co
 	wodan_config_t *base_config = (wodan_config_t *) base_config_p;
 	wodan_config_t *new_config  = (wodan_config_t *) new_config_p;
 	
-	if (strlen(new_config->cachedir) > 0) 
+	if (strlen(new_config->cachedir)) 
 		apr_cpystrn(config->cachedir, new_config->cachedir, MAX_CACHE_PATH_SIZE + 1);
 	else 
 		apr_cpystrn(config->cachedir, base_config->cachedir, MAX_CACHE_PATH_SIZE + 1);
 	
 	config->cachedir_levels = new_config->cachedir_levels;
-	if (new_config->is_cachedir_set == 1 || base_config->is_cachedir_set == 1)
+	if (new_config->is_cachedir_set || base_config->is_cachedir_set)
 		config->is_cachedir_set = 1;
-	if (new_config->run_on_cache == 1 || base_config->run_on_cache == 1)
+	if (new_config->run_on_cache || base_config->run_on_cache)
 		config->run_on_cache = 1;
-	if (new_config->cache_404s == 1 || base_config->cache_404s == 1)
+	if (new_config->cache_404s || base_config->cache_404s)
 		config->cache_404s = 1;
-	if (new_config->backend_timeout != (apr_interval_time_t) 0)
+	if (new_config->backend_timeout)
 		config->backend_timeout = new_config->backend_timeout;
 	else
 		config->backend_timeout = base_config->backend_timeout;
@@ -310,7 +302,6 @@ static const char *add_backend_timeout(cmd_parms *cmd,
 	
 	return NULL;
 }
-
 
 static int wodan_init_handler(apr_pool_t *p, 
 	apr_pool_t *plog UNUSED, 

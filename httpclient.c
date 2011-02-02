@@ -1,24 +1,18 @@
-/** $Id: httpclient.c 162 2005-02-16 15:36:06Z ilja $
+/*
  * (c) 2000-2006 IC&S, The Netherlands
+ * (c) 2008-2011 NFG, The Netherlands, paul@nfg.nl
  */
 
 
 #include "cache.h"
-#include "httpclient.h"
+#include "networkconnector.h"
+#include "util.h"
 
-#include "httpd.h"
 #include "http_log.h"
 
 #include "apr_date.h"
-#include "apr_file_io.h"
 #include "apr_lib.h"
 #include "apr_strings.h"
-#include "apr_tables.h"
-#include "apr_time.h"
-#include "apr_uri.h"
-
-#include <errno.h>
-#include <string.h>
 
 /**
  * send request line and Host header

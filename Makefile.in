@@ -15,7 +15,6 @@ SOURCE_FILES=mod_wodan.c \
 	     networkconnector.c \
 	     util.c 
 INCLUDE_FILES=cache.h \
-	      httpclient.h \
 	      networkconnector.h \
 	      util.h
 OBJECT_FILES=mod_wodan.o \

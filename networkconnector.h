@@ -1,15 +1,12 @@
-/** $Id: networkconnector.h 162 2005-02-16 15:36:06Z ilja $
+/**
  * (c) 2000-2006 IC&S, The Netherlands
+ * (c) 2008-2011 NFG, The Netherlands, paul@nfg.nl
  */
 
 #ifndef NETWORKCONNECTOR_H
 #define NETWORKCONNECTOR_H
 
 #include "datatypes.h"
-
-#include "httpd.h"
-
-#include <sys/time.h>
 
 int connection_write_bytes(apr_socket_t *socket, request_rec *r, const char *buffer, int buffersize);
 
