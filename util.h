@@ -50,25 +50,5 @@ apr_int32_t util_timestring_to_seconds(char *string);
  */
 char* util_skipspaces (char* input);
 
-/**
- * adjust the httpresponse->headers table for sending to the client.
- * puts all headers in r->out_headers. After call to this function,
- * headers can be sent to the client.
- * @param config wodan configuration
- * @param r request_rec
- * @param httpresponse response from backend.
- */
-void adjust_headers_for_sending(cache_state_t *);
-
-/**
- * convert a date to an rfc822 date string.
- * @param p memory pool
- * @param input_date_string string to convert
- * @returns
- * 		- rfc822 date string
- * 		- if not convertable, returns input_date_string
- */
-const char* wodan_date_canon(apr_pool_t *p, 
-	const char *input_date_string);
 
 #endif //_UTIL_H_

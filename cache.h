@@ -79,9 +79,39 @@ void cache_close_cachefile(wodan_config_t *config, request_rec *r,
 	apr_file_t *cachefile);
 
 /**
+ * adjust the httpresponse->headers table for sending to the client.
+ * puts all headers in r->out_headers. After call to this function,
+ * headers can be sent to the client.
+ * @param config wodan configuration
+ * @param r request_rec
+ * @param httpresponse response from backend.
+ */
+void adjust_headers_for_sending(cache_state_t *);
+
+
+/**
  * update the timestamp in the cache file 
  * @param r request_rec
  * @param config the wodan configuration
  */
 int cache_update_expiry_time(cache_state_t *);
+
+
+/** receive status line from backend
+ * @param connection connection to backend
+ * @param r request_rec
+ * @param httpresponse will hold response.
+ * @return status, or -1 if no response
+ */
+int receive_status_line(cache_state_t *, apr_socket_t *);
+
+/** receive headers from backend */
+int receive_headers(cache_state_t *, apr_socket_t *);
+
+/** receive the body of the response from the backend */
+int receive_body(cache_state_t *, apr_socket_t *, apr_file_t *);
+
+
+void ap_reverseproxy_clear_connection(apr_pool_t *, apr_table_t *);
+
 #endif
