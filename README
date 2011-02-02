@@ -48,21 +48,21 @@ less work to do.
   power to generate live pages, but the pages don't change too often.
 - To hide the web servers from the internet.
 - Provide a readonly emergency cache in case of catastrophic failure of all
-  backend webservers. Being able to run in disconnected mode is one of the 
-  main advantages compared to more advanced caching solutions like varnish.
+  backend webservers. Being able to run in disconnected mode is one of the main
+advantages compared to more advanced caching solutions like varnish.
 
 ---------------------------------------------------------------
 3. When NOT to use Wodan, or when to think twice about using it
 ---------------------------------------------------------------
 
-- The web site has a user login/authentication system. Or rather, do not use
-  it if the biggest part of your site is hidden behind a login system. If
-  you have a much visited set of pages and a part behind a login system, you
-  can still use mod_wodan to cache the public part. 
+- The web site has a user login/authentication system. Or rather, do not use it
+  if the biggest part of your site is hidden behind a login system. If you have
+a much visited set of pages and a part behind a login system, you can still use
+mod_wodan to cache the public part. 
 
-- The web site site has very dynamic content. In this case, mod_wodan will
-  not gain you much in terms of server load. You can still cache things
-  like graphics and css files though, so there still might be some gain.
+- The web site site has very dynamic content. In this case, mod_wodan will not
+  gain you much in terms of server load. You can still cache things like
+graphics and css files though, so there still might be some gain.
 
 --------------------------------------
 4. Advantages over other proxy systems
@@ -75,16 +75,13 @@ Here is an overview of a few important advantages:
 - Uses custom headers so you can control caching yourself.
 - High performance.
 - Use of other apache modules like usertracking, or mod_balance.
-- The often used open source reverse proxy, Squid, is too nice to clients.
-  Whenever a client really wants the page from the webserver, Squid passes the
-  request to the backend. Wodan, however, will always serve from it's cache, unless
-  the configuration tells it not to.
-  Varnish is a major and powerfull improvement in this respect, but requires 
-  careful tuning.
+- Often used open source reverse proxies like Squid are sometimes too nice for
+  clients.  Whenever a client really wants the page from the webserver, Squid
+passes the request to the backend. Wodan, however, will always serve from it's
+cache, unless the configuration tells it not to.  Varnish is a major and
+powerfull improvement in this respect, but requires careful tuning.
   
----------------
-5. Installation
----------------
+--------------- 5. Installation ---------------
 
 See INSTALL file.	
 
@@ -100,33 +97,35 @@ sections:
 	WodanPass <dir> <url>
 	----------------------
 
-	Map a directory to a remote server, e.g. WodanPass / http://www.wodan.net to map
-	the entire host to the wodan website. You can also specify a subdirectory, e.g.
-	WodanPassReverse /wodan/ http://www.wodan.net to map the /wodan/ dir of the host to the
-	wodan website. The url field may contain port and/or subdir info, e.g. 
-	http://www.wodan.net:8080/docs/
+Map a directory to a remote server, e.g. WodanPass / http://www.wodan.net to
+map the entire host to the wodan website. You can also specify a subdirectory,
+e.g.  WodanPassReverse /wodan/ http://www.wodan.net to map the /wodan/ dir of
+the host to the wodan website. The url field may contain port and/or subdir
+info, e.g.  http://www.wodan.net:8080/docs/
 
 	----------------------------
 	WodanPassReverse <dir> <url>
 	----------------------------
 
-	Reverse map a remote host to the subdir. This means wodan adjusts some header fields 
-	received from the webserver (e.g. Location:). Wodan replaces the <url> part in the headers
-	by the hostname and <dir> tag. Only use this tag when also using WodanPassReverse, e.g.:
+Reverse map a remote host to the subdir. This means wodan adjusts some header
+fields received from the webserver (e.g. Location:). Wodan replaces the <url>
+part in the headers by the hostname and <dir> tag. Only use this tag when also
+using WodanPassReverse, e.g.:
 
 	WodanPass / http://www.wodan.net:8080/
 	WodanPassReverse / http://www.wodan.net/
 
-	NOTE: a lot of webservers don't send port information in the headers, so you shouldn't 
-	specify the port of the webserver. You can see this in the example above.
+NOTE: a lot of webservers don't send port information in the headers, so you
+shouldn't specify the port of the webserver. You can see this in the example
+above.
 
 	----------------------------------
 	WodanDefaultCacheTime <dir> <time>
 	----------------------------------
 
-	Specifies how long pages in the specified dir should stay in cache before 
-	they are refetched from the webserver. If this is not specified it is 1 hour. 
-	The syntax for specifying time is:
+Specifies how long pages in the specified dir should stay in cache before they
+are refetched from the webserver. If this is not specified it is 1 hour.  The
+syntax for specifying time is:
 
 		<number><letter> | no-cache
 
@@ -143,14 +142,14 @@ sections:
 	WodanDefaultCacheTimeMatch <regexpattern> <time>
 	------------------------------------------------
 
-	Specifies how long pages (or other web-objects) with a uri conforming to regexpattern
-	will stay in cache. The syntax for specifying time is the same as with
-	the WodanDefaultCacheTime directive. 
+Specifies how long pages (or other web-objects) with a uri conforming to
+regexpattern will stay in cache. The syntax for specifying time is the same as
+with the WodanDefaultCacheTime directive. 
 
-	Note that this directive will take precedence over WodanDefaultCacheTime. 
-	Because of this, the following directives will have the result of caching
-	all files inside the /var/www dir for 2 minutes, except the JPGs, which 
-	will be cached for 30 minutes:
+Note that this directive will take precedence over WodanDefaultCacheTime.
+Because of this, the following directives will have the result of caching all
+files inside the /var/www dir for 2 minutes, except the JPGs, which will be
+cached for 30 minutes:
 
 	WodanDefaultCacheTime /var/www 2m
 	WodanDefaultCacheTimeMatch ^/var/www/.*jpg$ 30m
@@ -159,17 +158,16 @@ sections:
 	WodanDefaultCacheTimeHeaderMatch <http-header> <regexpattern> <time>
 	--------------------------------------------------------------------
 
-	Specifies how long web-objects which are send with a HTTP-header
-	conforming to the regular expression pattern will stay in cache. The
-	syntax for specifying time is the same as with the WodanDefaultCacheTime
-	directive.
+Specifies how long web-objects which are send with a HTTP-header conforming to
+the regular expression pattern will stay in cache. The syntax for specifying
+time is the same as with the WodanDefaultCacheTime directive.
 
-	Please not that this directive will take precedence over other 
-	WodanDefaultCacheTime directives.
+Please not that this directive will take precedence over other
+WodanDefaultCacheTime directives.
 
-	The following directives will cache everything inside the /var/www 
-	directory for two minutes, except for all images (all objects with
-	a mime-type of image/*, which will be cached for 30 minutes:
+The following directives will cache everything inside the /var/www directory
+for two minutes, except for all images (all objects with a mime-type of
+image/*, which will be cached for 30 minutes:
 
 	WodanDefaultCacheTime /var/www 2m
 	WodanDefaultCacheTimeHeaderMatch Content-Type ^image/.*$ 30m 
@@ -178,15 +176,15 @@ sections:
 	WodanHashHeader <http-header> 
 	-----------------------------
 
-	Specifies additional request headers to use in constructing the SHA1 hash for 
-	a request. 
+Specifies additional request headers to use in constructing the SHA1 hash for a
+request. 
 
-	If you want to use a shared WodanCache directory for multiple sites
-        be sure to add the following
+If you want to use a shared WodanCache directory for multiple sites be sure to
+add the following
 
         WodanHashHeader Host
 
-	The following directives will add support for multi-lingual sites.
+The following directives will add support for multi-lingual sites.
 
 	WodanHashHeader Cookie
 	WodanHashHeader Accept-Language
@@ -195,25 +193,23 @@ sections:
 	WodanHashHeaderMatch <http-header> <regexpattern>
 	-------------------------------------------------
 
-	This adds regexp matching on headers, and allows substitions as well:
-
-	for example, use:
+This adds regexp matching on headers, and allows substitions as well:
 
 	WodanHashHeaderMatch Cookie '.*(I18N_LANGUAGE=[^;]+).*' $1
 
-	to extract the I18N_LANGUAGE cookie and use it in calculating the hash
-	for a particular request.
+Use this to extract the I18N_LANGUAGE cookie and include it in calculating the
+hash for a particular request.
 
 	-------------------
 	WodanCacheDir <dir>
 	-------------------
 
-	The directory in which the cachefiles are stored. Make sure the directory 
-	is writable by the user under which Apache runs. For example:
+The directory in which the cachefiles are stored. Make sure the directory is
+writable by the user under which Apache runs. For example:
 
 	WodanCacheDir /usr/local/apache_wodan/cache
 
-	To create the cache directory:
+To create the cache directory:
       
 	# mkdir /usr/local/apache_wodan/cache
 	# chown nobody:nobody /usr/local/apache_wodan/cache
@@ -224,64 +220,64 @@ sections:
 	WodanCacheDirLevels <levels>
 	----------------------------
 
-	The number of nested subdirectories that will be created in the WodanCacheDir.
-	For example, with two levels, a cache file called
-	'ce8d3d2136d2528b1f59b23864a4a0ba' will be stored in '<cachedir>/c/e/'.
+The number of nested subdirectories that will be created in the WodanCacheDir.
+For example, with two levels, a cache file called
+'ce8d3d2136d2528b1f59b23864a4a0ba' will be stored in '<cachedir>/c/e/'.
 
-	The default is two levels, the maximum is 8 levels.
+The default is two levels, the maximum is 8 levels.
 
 	----------------------
 	WodanRunOnCache on|off
 	----------------------
 
-	If set to on, only for requests that are not present in the cache is the backend
-        contacted. The (virtual) server will never return 50x errors if the backend is 
-	unreachable. This can for instance be useful if there is some scheduled downtime 
-	on the backend, but you would like to keep a site on-line.
+If set to on, only for requests that are not present in the cache is the
+backend contacted. The (virtual) server will never return 50x errors if the
+backend is unreachable. This can for instance be useful if there is some
+scheduled downtime on the backend, but you would like to keep a site on-line.
 
-	A logical side effect of this is that files which can be served from cache, are 
-	served from the cache, even when they are expired (ttl < 0).
+A logical side effect of this is that files which can be served from cache, are
+served from the cache, even when they are expired (ttl < 0).
 
-	If a requested page cannot be found in the cache, a 404 NOT FOUND error 
-	is sent to the client.
+If a requested page cannot be found in the cache, a 404 NOT FOUND error is sent
+to the client.
 
-	The default value for WodanRunOnCache is 'off'.
+The default value for WodanRunOnCache is 'off'.
 
 	---------------------
 	WodanCache404s yes|no
 	---------------------
 
-	If set to "yes", Wodan will store 404 status codes in cachefiles
-	for URL that get this return code from the backend. Their default expire
-	time is the same as for other documents.
+If set to "yes", Wodan will store 404 status codes in cachefiles for URL that
+get this return code from the backend. Their default expire time is the same as
+for other documents.
 
-	The default value for Cache404s is 'no'.
+The default value for Cache404s is 'no'.
 
 	------------------------------------------
 	WodanBackendTimeout <time in milliseconds>
 	------------------------------------------
 
-	If set, this specifies a timeout for the backend connection. This controls
-	the amount of time the reverse proxy waits for a connection with the 
-	backend can be made. This includes the time it takes to get the first
-	byte of information from the backend. 
-	If a connection cannot be made, the page is taken
-	from the cache, even if it is supposed to be expired. When the page
-	is not in cache, a 404 is generated if the connection times out. 
-	When the file is served from cache, the cache is rewritten with
-	a new expiry time, so future requests for the same file will
-	not go the backend, until the time expires.
+If set, this specifies a timeout for the backend connection. This controls the
+amount of time the reverse proxy waits for a connection with the backend can be
+made. This includes the time it takes to get the first byte of information from
+the backend. 
 
-	This directive can be useful when a backend is not very stable, but the
-	site needs to stay up (albeit with a slight delay, set by <time>)
+If a connection cannot be made, the page is taken from the cache, even if it is
+supposed to be expired. When the page is not in cache, a 404 is generated if
+the connection times out. When the file is served from cache, the cache is
+rewritten with a new expiry time, so future requests for the same file will not
+go the backend, until the time expires.
 
-	The Timeout time is given in millisecond (1/1000 second). e.g. 
-	WodanBackendTimeout 1500 is used for a timeout of 1.5 seconds.
-	The maximum value for time is 60000 milliseconds (60 seconds). If fed with 
-	a higher number, the BackendTimeout will be set to 60000 milliseconds.
+This directive can be useful when a backend is not very stable, but the site
+needs to stay up (albeit with a slight delay, set by <time>)
 
-	The default value for WodanBackendTimeout is 0, which means that the timeout
-	will not be used (only the normal apache and TCP timeouts will be used.
+The Timeout time is given in millisecond (1/1000 second). e.g.
+WodanBackendTimeout 1500 is used for a timeout of 1.5 seconds.  The maximum
+value for time is 60000 milliseconds (60 seconds). If fed with a higher number,
+the BackendTimeout will be set to 60000 milliseconds.
+
+The default value for WodanBackendTimeout is 0, which means that the timeout
+will not be used (only the normal apache and TCP timeouts will be used.
 
 ----------
 7. Running
@@ -299,29 +295,27 @@ Running Wodan is really simple. Just start apache with:
 	X-Wodan header
 	--------------
 
-	In addition to the default cache time values, you can specify 
-	cache time values per page. To do this, the web server serving 
-	the real pages must add an additional header:
+In addition to the default cache time values, you can specify cache time values
+per page. To do this, the web server serving the real pages must add an
+additional header:
 
 		X-Wodan
 
-	This header can contain the following information:
+This header can contain the following information:
 
 		'expire <number><letter>' or
 		'no-cache'
 
-	The syntax for '<number><letter>' is the same as in the 
-	Apache configuration.
+The syntax for '<number><letter>' is the same as in the Apache configuration.
 	
 	Examples:
 
 		X-Wodan: no-cache
 		X-Wodan: expire 35m
 
-	If you are using PHP in your pages, it's very easy to send 
-	these extra headers. Just put the following code at the top of 
-	your .php file (this has to be before any HTML content, 
-	because headers have to be sent before that):
+If you are using PHP in your pages, it's very easy to send these extra headers.
+Just put the following code at the top of your .php file (this has to be before
+any HTML content, because headers have to be sent before that):
 
 		<?php header("X-Wodan: expire 10m"); ?>
 
@@ -330,8 +324,8 @@ Running Wodan is really simple. Just start apache with:
         Expires header
         --------------
 
-	In addition to this custom X-Wodan header, the standard Expires
-        header is also respected. X-Wodan will take precedence though.
+In addition to this custom X-Wodan header, the standard Expires header is also
+respected. X-Wodan will take precedence though.
 
 	Example:
 		Expires: Thu, 23 Dec 2010 10:03:15 GMT
@@ -354,22 +348,22 @@ of the WodanSource header.
 
 FIXME: WodanBackendTime is a noop at this time.
 
-The other note that is set is "WodanBackendTime". This note is set for every 
-request that gets it's content from the backend. It records the time that 
-it takes to get the whole request from the backend. To get this into
-your access log, add %{WodanBackendTime} to your logformat.
+The other note that is set is "WodanBackendTime". This note is set for every
+request that gets it's content from the backend. It records the time that it
+takes to get the whole request from the backend. To get this into your access
+log, add %{WodanBackendTime} to your logformat.
 
 -----------------------
 10. Tools
 -----------------------
 
-The tools/ directory holds tools that can be used for maintaining
-a system with Wodan.
+The tools/ directory holds tools that can be used for maintaining a system with
+Wodan.
 
 1. remove_expired.py
 
-This very simple Python script removed all expired cache files
-in a directory. It does this recursively.
+This very simple Python script removed all expired cache files in a directory.
+It does this recursively.
 
 e.g.:
 remove_expired.py /var/wodan/cache 
@@ -382,7 +376,7 @@ The best way to use this script is to run it using cron.
 11. Contact Information
 -----------------------
 
-Wodan was originally created by IC&S (http://www.ic-s.nl/), a Dutch Linux 
+Wodan was originally created by IC&S (http://www.ic-s.nl/), a Dutch Linux
 company.
 
 It is currently maintained by NFG (http://www.nfg.nl), an other Dutch Linux
