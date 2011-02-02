@@ -17,9 +17,9 @@
  */
 typedef enum {
 	WODAN_CACHE_PRESENT,        /** present and fresh */
-	WODAN_CACHE_PRESENT_EXPIRED,/** present but expired */
-	WODAN_CACHE_NOT_PRESENT,     /** not present */
-	WODAN_CACHE_NOT_CACHEABLE,   /** cannot be cached */
+	WODAN_CACHE_EXPIRED,/** present but expired */
+	WODAN_CACHE_MISSING,     /** not present */
+	WODAN_CACHE_NOCACHE,   /** cannot be cached */
 	WODAN_CACHE_404              /** cached 404 */
 } WodanCacheStatus_t;
 
@@ -30,9 +30,9 @@ typedef enum {
  * @param[out] cache_file_time the time the cache file was created.
  * @return
  *      - WODAN_CACHE_PRESENT if present and fresh
- *      - WODAN_CACHE_PRESENT_EXPIRED if present but expired
- *      - WODAN_CACHE_NOT_PRESENT not present in cache 
- *      - WODAN_CACHE_NOT_CACHEABLE for requests that cannot be cached
+ *      - WODAN_CACHE_EXPIRED if present but expired
+ *      - WODAN_CACHE_MISSING not present in cache 
+ *      - WODAN_CACHE_NOCACHE for requests that cannot be cached
  *      - WODAN_CACHE_404 for requests that are cached as a 404 (not found)
  */
 WodanCacheStatus_t cache_status(cache_state_t *);

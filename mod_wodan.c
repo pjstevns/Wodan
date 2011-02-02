@@ -81,9 +81,7 @@ static void *wodan_merge_config(apr_pool_t *p, void *base_config_p, void *new_co
 	return config;
 }               
 
-
-static const char *add_pass(cmd_parms *cmd, void *dummy UNUSED, 
-	const char *path, const char *url)
+static const char *add_pass(cmd_parms *cmd, void *dummy UNUSED, const char *path, const char *url)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
@@ -106,8 +104,7 @@ static const char *add_pass(cmd_parms *cmd, void *dummy UNUSED,
 	return NULL;
 }
 
-static const char *add_pass_reverse(cmd_parms *cmd,
-	void *dummy UNUSED, const char *path, const char *url)
+static const char *add_pass_reverse(cmd_parms *cmd, void *dummy UNUSED, const char *path, const char *url)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
@@ -124,8 +121,7 @@ static const char *add_pass_reverse(cmd_parms *cmd,
 	return NULL;
 }
 
-static const char *add_cachedir(cmd_parms *cmd, void *dummy UNUSED, 
-	const char *path)
+static const char *add_cachedir(cmd_parms *cmd, void *dummy UNUSED, const char *path)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
@@ -163,8 +159,7 @@ static const char *add_cachedir_levels(cmd_parms *cmd, void *dummy UNUSED, const
 	return NULL;
 }	
 
-static const char *add_default_cachetime(cmd_parms *cmd, 
-	void *dummy UNUSED, const char *path, const char *time_string)
+static const char *add_default_cachetime(cmd_parms *cmd, void *dummy UNUSED, const char *path, const char *time_string)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
@@ -183,9 +178,7 @@ static const char *add_default_cachetime(cmd_parms *cmd,
 	return NULL;
 }
 
-static const char* add_default_cachetime_regex(cmd_parms *cmd, 
-	void *dummy UNUSED, const char *regex_pattern, 
-	const char *time_string)
+static const char* add_default_cachetime_regex(cmd_parms *cmd, void *dummy UNUSED, const char *regex_pattern, const char *time_string)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
@@ -218,8 +211,7 @@ static const char* add_hash_header(cmd_parms *cmd, void *dummy UNUSED, const cha
 	return NULL;
 }
 
-static const char* add_hash_header_match(cmd_parms *cmd, 
-	void *dummy UNUSED, const char *headername, const char *regex_pattern, const char *replacement)
+static const char* add_hash_header_match(cmd_parms *cmd, void *dummy UNUSED, const char *headername, const char *regex_pattern, const char *replacement)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *) ap_get_module_config(s->module_config, &wodan_module);
@@ -238,9 +230,7 @@ static const char* add_hash_header_match(cmd_parms *cmd,
 	return NULL;
 }
 
-static const char* add_default_cachetime_header(cmd_parms *cmd, 
-	void *dummy UNUSED, const char *http_header, 
-	const char *regex_pattern, const char *time_string)
+static const char* add_default_cachetime_header(cmd_parms *cmd, void *dummy UNUSED, const char *http_header, const char *regex_pattern, const char *time_string)
 {
 	server_rec *s = cmd->server;
 	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(s->module_config, &wodan_module);
@@ -271,8 +261,7 @@ static const char* add_run_on_cache(cmd_parms *cmd, void *dummy UNUSED, int flag
 	return NULL;
 }
 
-static const char *add_cache_404s(cmd_parms *cmd, 
-	void *dummy UNUSED, int flag)
+static const char *add_cache_404s(cmd_parms *cmd, void *dummy UNUSED, int flag)
 {
 	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(cmd->server->module_config, &wodan_module);
 	
@@ -281,8 +270,7 @@ static const char *add_cache_404s(cmd_parms *cmd,
 	return NULL;
 }
 
-static const char *add_backend_timeout(cmd_parms *cmd,
-	void *dummy UNUSED, const char *timeout_string)
+static const char *add_backend_timeout(cmd_parms *cmd, void *dummy UNUSED, const char *timeout_string)
 {
 	wodan_config_t *config = (wodan_config_t *)ap_get_module_config(cmd->server->module_config, &wodan_module);
 	apr_int64_t timeout;
@@ -303,10 +291,7 @@ static const char *add_backend_timeout(cmd_parms *cmd,
 	return NULL;
 }
 
-static int wodan_init_handler(apr_pool_t *p, 
-	apr_pool_t *plog UNUSED, 
-	apr_pool_t *ptemp UNUSED,
-	server_rec *s UNUSED)
+static int wodan_init_handler(apr_pool_t *p, apr_pool_t *plog UNUSED, apr_pool_t *ptemp UNUSED, server_rec *s UNUSED)
 {
 	const char *identifier_string;
 	
@@ -318,71 +303,63 @@ static int wodan_init_handler(apr_pool_t *p,
 
 static int wodan_handler(request_rec *r)
 {
-	wodan_config_t* config;
-	httpresponse_t httpresponse;
+	httpresponse_t H;
+	cache_state_t C;
 	WodanCacheStatus_t status;
-	cache_state_t cachestate;
 	
 	DEBUG("Processing new request: %s%s", r->hostname, r->unparsed_uri);
 
-	memset(&cachestate, 0, sizeof(cache_state_t));
-	config = (wodan_config_t *)ap_get_module_config(r->server->module_config, &wodan_module);
-	httpresponse.headers = apr_table_make(r->pool, 0);
+	memset(&C, 0, sizeof(cache_state_t));
+	C.config = (wodan_config_t *)ap_get_module_config(r->server->module_config, &wodan_module);
+	H.headers = apr_table_make(r->pool, 0);
 
-	cachestate.httpresponse = &httpresponse;
-	cachestate.config = config;
-	cachestate.r = r;
+	C.httpresponse = &H;
+	C.r = r;
 
 	// see if the request can be handled from the cache.
-	status = cache_status(&cachestate);
+	status = cache_status(&C);
 
 	switch (status) {
-		/*
-		   WODAN_CACHE_PRESENT,         // present and fresh 
-		   WODAN_CACHE_PRESENT_EXPIRED, // present but expired
-		   WODAN_CACHE_NOT_PRESENT,     // not present
-		   WODAN_CACHE_NOT_CACHEABLE,   // cannot be cached
-		   WODAN_CACHE_404              // cached 404
-		   */
 		case WODAN_CACHE_404:
 		case WODAN_CACHE_PRESENT:
-			cache_read(&cachestate);
+			cache_read(&C);
 			break;
 
-		case WODAN_CACHE_NOT_PRESENT:
-		case WODAN_CACHE_NOT_CACHEABLE:
-		case WODAN_CACHE_PRESENT_EXPIRED:
+		case WODAN_CACHE_EXPIRED:
+		case WODAN_CACHE_MISSING:
+		case WODAN_CACHE_NOCACHE:
 			//Get the httpresponse from remote server	
-			if ((cache_update(&cachestate) == DECLINED))
+			if ((cache_update(&C) == DECLINED))
 				return DECLINED;
 
 			/* If 404 are to be cached, then already return
 			 * default 404 page here in case of a 404. */
-			if ((config->cache_404s) && (httpresponse.response == HTTP_NOT_FOUND))
+			if ((C.config->cache_404s) && (H.response == HTTP_NOT_FOUND))
 				break;
 
 			/* if nothing can be received from backend, and there's
 			   nothing in cache, return the response code so
 			   ErrorDocument can handle it ... */
-			if (status != WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_FOUND))) {
-				if (config->run_on_cache)
-					httpresponse.response = HTTP_NOT_FOUND;
+			if (status != WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(H.response) || (H.response == HTTP_NOT_FOUND))) {
+				if (C.config->run_on_cache)
+					H.response = HTTP_NOT_FOUND;
 				break;
 			}
 
-			if (status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_MODIFIED))) {
-				cache_update_expiry_time(&cachestate);
-				cache_read(&cachestate);
-				httpresponse.response = HTTP_OK;
+			if (status == WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(H.response) || (H.response == HTTP_NOT_MODIFIED))) {
+				cache_update_expiry_time(&C);
+				cache_read(&C);
+				H.response = HTTP_OK;
 				break;
 			}
 	}
-	//Return some response code
-	DEBUG("return: %d, httpresponse.response: %d",  OK, httpresponse.response);
 
 	// better safe than sorry
-	r->status = httpresponse.response;
+	r->status = H.response;
 	
+	//Return some response code
+	DEBUG("OK: r->status: %d",  r->status);
+
 	return OK; 
 }
 
