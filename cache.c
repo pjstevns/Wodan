@@ -1446,6 +1446,7 @@ static int receive_complete_response(cache_state_t *cachestate, apr_socket_t *so
 }
 static apr_socket_t* connection_open (cache_state_t *cachestate, char* host, int port, int do_ssl UNUSED)
 {
+	apr_status_t result;
 	apr_socket_t *socket;
 	apr_sockaddr_t *server_address;
 	wodan_config_t *config = cachestate->config;
@@ -1464,10 +1465,12 @@ static apr_socket_t* connection_open (cache_state_t *cachestate, char* host, int
 
 	if (config->backend_timeout > 0) {
 		apr_socket_timeout_set(socket, config->backend_timeout);
-		ERROR("socket timeout set to %ld", config->backend_timeout);
+		DEBUG("socket timeout set to %ld", config->backend_timeout);
 	}
-	if (apr_socket_connect(socket, server_address) != APR_SUCCESS) {
-		ERROR("Socket error while connecting to server at %s:%d", host, port);
+	if ((result = apr_socket_connect(socket, server_address)) != APR_SUCCESS) {
+		char err_buf[255];
+		memset(&err_buf,0,sizeof(err_buf));
+		ERROR("Socket error at %s:%d - [%s]", host, port, apr_strerror(result, err_buf, sizeof(err_buf)));
 		return NULL;
 	}
 	DEBUG("Succesfully connected to %s:%d", host, port);
