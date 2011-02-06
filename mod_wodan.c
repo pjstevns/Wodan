@@ -303,64 +303,10 @@ static int wodan_init_handler(apr_pool_t *p, apr_pool_t *plog UNUSED, apr_pool_t
 
 static int wodan_handler(request_rec *r)
 {
-	httpresponse_t H;
-	cache_state_t C;
-	WodanCacheStatus_t status;
-	
 	DEBUG("Processing new request: %s%s", r->hostname, r->unparsed_uri);
 
-	memset(&C, 0, sizeof(cache_state_t));
-	C.config = (wodan_config_t *)ap_get_module_config(r->server->module_config, &wodan_module);
-	H.headers = apr_table_make(r->pool, 0);
-
-	C.httpresponse = &H;
-	C.r = r;
-
-	// see if the request can be handled from the cache.
-	status = cache_status(&C);
-
-	switch (status) {
-		case WODAN_CACHE_404:
-		case WODAN_CACHE_PRESENT:
-			cache_read(&C);
-			break;
-
-		case WODAN_CACHE_EXPIRED:
-		case WODAN_CACHE_MISSING:
-		case WODAN_CACHE_NOCACHE:
-			//Get the httpresponse from remote server	
-			if ((cache_update(&C) == DECLINED))
-				return DECLINED;
-
-			/* If 404 are to be cached, then already return
-			 * default 404 page here in case of a 404. */
-			if ((C.config->cache_404s) && (H.response == HTTP_NOT_FOUND))
-				break;
-
-			/* if nothing can be received from backend, and there's
-			   nothing in cache, return the response code so
-			   ErrorDocument can handle it ... */
-			if (status != WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(H.response) || (H.response == HTTP_NOT_FOUND))) {
-				if (C.config->run_on_cache)
-					H.response = HTTP_NOT_FOUND;
-				break;
-			}
-
-			if (status == WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(H.response) || (H.response == HTTP_NOT_MODIFIED))) {
-				cache_update_expiry_time(&C);
-				cache_read(&C);
-				H.response = HTTP_OK;
-				break;
-			}
-	}
-
-	// better safe than sorry
-	r->status = H.response;
-	
-	//Return some response code
-	DEBUG("OK: r->status: %d",  r->status);
-
-	return OK; 
+	CacheState_T C = cache_new(r, &wodan_module);
+	return cache_handler(C);
 }
 
 static void wodan_register_hooks(apr_pool_t *p UNUSED)

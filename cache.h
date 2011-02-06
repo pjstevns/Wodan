@@ -1,117 +1,22 @@
 /** $Id: cache.h 162 2005-02-16 15:36:06Z ilja $
  * (c) 2000-2006 IC&S, The Netherlands
+ * (c) 2008-2011, NFG Net Facilities Group BV, info@nfg.nl
  */
 
 #ifndef CACHE_H
 #define CACHE_H
 
 #include "datatypes.h"
+#include "http_config.h"
 
-/**
- * This is used when allocating buffers to work with
- */
-#define MAX_CACHEFILE_PATH_LENGTH 512
+#define T CacheState_T
+typedef struct T *T;
 
-/**
- * used for signaling if a URI is present in the cache
- */
-typedef enum {
-	WODAN_CACHE_PRESENT,        /** present and fresh */
-	WODAN_CACHE_EXPIRED,/** present but expired */
-	WODAN_CACHE_MISSING,     /** not present */
-	WODAN_CACHE_NOCACHE,   /** cannot be cached */
-	WODAN_CACHE_404              /** cached 404 */
-} WodanCacheStatus_t;
+extern T cache_new(request_rec *r, module *);
+extern int cache_handler(T);
+extern int cache_status(T C);
+extern int cache_update(T C);
+extern int cache_read(T C);
 
-/**
- * Look wether or not the request can be handled from the cache
- * @param r the request record
- * @param config the wodan configuration
- * @param[out] cache_file_time the time the cache file was created.
- * @return
- *      - WODAN_CACHE_PRESENT if present and fresh
- *      - WODAN_CACHE_EXPIRED if present but expired
- *      - WODAN_CACHE_MISSING not present in cache 
- *      - WODAN_CACHE_NOCACHE for requests that cannot be cached
- *      - WODAN_CACHE_404 for requests that are cached as a 404 (not found)
- */
-WodanCacheStatus_t cache_status(cache_state_t *);
-
-/**
- * Look whether the request can be handled from the cache.
- * @param r The request record
- * @param config the wodan configuration 
- * @param httpresponse The httpresponse record the data should be set in
- * @return 1 of request can be handled from cache 0 otherwise
- */
-int cache_read(cache_state_t *);
-
-/**
- * Method that connects to the backend and gets data from it
- * @param host The ReverseProxyPass url
- * @param httpresponse The httpresponse structure to put the data in
- * @param r The request record
- * @param cache_file_time creation time of cache file (or (time_t) 0 if there's
- * 		no cache file.
- * @return The result code returned by the backend
- * 
- */
-int cache_update(cache_state_t *);
-
-
-/**
- * get cache file
- * @param r request_rec
- * @param config the wodan configuration
- * @param httpresponse the httpresponse from the backend
- * @retval NULL if not being cached
- * @retval apr_file_t pointer otherwise.
- */
-apr_file_t *cache_get_cachefile(cache_state_t *);
-
-/**
- * close the cache file.
- * @param r request_rec
- * @param config the wodan configuration
- * @param cachefile the cache file, may be NULL
- */
-void cache_close_cachefile(wodan_config_t *config, request_rec *r, 
-	apr_file_t *cachefile);
-
-/**
- * adjust the httpresponse->headers table for sending to the client.
- * puts all headers in r->out_headers. After call to this function,
- * headers can be sent to the client.
- * @param config wodan configuration
- * @param r request_rec
- * @param httpresponse response from backend.
- */
-void adjust_headers_for_sending(cache_state_t *);
-
-
-/**
- * update the timestamp in the cache file 
- * @param r request_rec
- * @param config the wodan configuration
- */
-int cache_update_expiry_time(cache_state_t *);
-
-
-/** receive status line from backend
- * @param connection connection to backend
- * @param r request_rec
- * @param httpresponse will hold response.
- * @return status, or -1 if no response
- */
-int receive_status_line(cache_state_t *, apr_socket_t *);
-
-/** receive headers from backend */
-int receive_headers(cache_state_t *, apr_socket_t *);
-
-/** receive the body of the response from the backend */
-int receive_body(cache_state_t *, apr_socket_t *, apr_file_t *);
-
-
-void ap_reverseproxy_clear_connection(apr_pool_t *, apr_table_t *);
-
+#undef T
 #endif

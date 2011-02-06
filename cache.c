@@ -24,6 +24,9 @@
 #include "apr_time.h"
 #include "apr_lib.h"
 
+#define MAX_CACHEFILE_PATH_LENGTH 512
+
+#define T CacheState_T
 
 typedef struct {
 	char *url;
@@ -32,6 +35,35 @@ typedef struct {
 	int status;
 } WodanCacheHeader_T;
 
+typedef enum {
+	WODAN_CACHE_PRESENT,        /** present and fresh */
+	WODAN_CACHE_EXPIRED,/** present but expired */
+	WODAN_CACHE_MISSING,     /** not present */
+	WODAN_CACHE_NOCACHE,   /** cannot be cached */
+	WODAN_CACHE_404              /** cached 404 */
+} WodanCacheStatus_t;
+
+
+/**
+ * Structure representing an httpresponse
+ */
+typedef struct httpresponse {
+	char* content_type;//The content type of the data
+	apr_table_t* headers;//A table containing the headers
+	int response;//The response code
+} Response_T;
+
+struct T {
+	WodanCacheStatus_t status;
+	apr_time_t cache_file_time;
+	char *cachefilename;
+	wodan_config_t *config;
+	request_rec *r;
+	Response_T *R;
+};
+
+
+void ap_reverseproxy_clear_connection(apr_pool_t *, apr_table_t *);
 /**
  * \brief check if the CacheDir directive is set
  * \param config the server configuration
@@ -320,49 +352,60 @@ static void apply_proxy_pass_reverse(wodan_config_t *config, apr_table_t* header
 
 
 
-void adjust_headers_for_sending(cache_state_t *cachestate)
+void adjust_headers_for_sending(T C)
 {
-
-	wodan_config_t *config = cachestate->config;
-	request_rec *r = cachestate->r;
-	httpresponse_t *httpresponse = cachestate->httpresponse;
-
 	/* do more adjustments to the headers. This used to be in 
 	   mod_reverseproxy.c */
-	apr_table_unset(httpresponse->headers, "X-Wodan");
-	wodan_table_add_when_empty(httpresponse->headers, r->headers_out);
-	apply_proxy_pass_reverse(config, httpresponse->headers, r);
+	apr_table_unset(C->R->headers, "X-Wodan");
+	wodan_table_add_when_empty(C->R->headers, C->r->headers_out);
+	apply_proxy_pass_reverse(C->config, C->R->headers, C->r);
 	
-	r->headers_out = httpresponse->headers;
-	r->content_type = apr_table_get(httpresponse->headers, "Content-Type");
-	r->status = httpresponse->response;
+	C->r->headers_out = C->R->headers;
+	C->r->content_type = apr_table_get(C->R->headers, "Content-Type");
+	C->r->status = C->R->response;
 }
 
-
-WodanCacheStatus_t cache_status(cache_state_t *cachestate)
+T cache_init(request_rec *r, module *wodan_module)
+{
+	T C;
+	C = apr_pcalloc(r->pool, sizeof(*C));
+	C->r = r;
+	C->config = (wodan_config_t *)ap_get_module_config(C->r->server->module_config, wodan_module);
+	C->R->headers = apr_table_make(C->r->pool, 0);
+	return C;
+}
+int cache_status(T C)
 {
 	apr_file_t *cachefile;
 	char buffer[BUFFERSIZE];
 	int status;
 	int interval_time = 0;
 	long int ttl;
-	wodan_config_t *config = cachestate->config;
-	request_rec *r = cachestate->r;
-	apr_time_t cache_file_time = cachestate->cache_file_time;
-	char ** cachefilename = &(cachestate->cachefilename);
+	wodan_config_t *config = C->config;
+	request_rec *r = C->r;
+	apr_time_t cache_file_time = C->cache_file_time;
+	char ** cachefilename = &(C->cachefilename);
 
-	if(r->method_number != M_GET && !r->header_only)
-		return WODAN_CACHE_NOCACHE;
+	if(r->method_number != M_GET && !r->header_only) {
+		C->status = WODAN_CACHE_NOCACHE;
+		return C->status;
+	}
 
 	// if the CacheDir directive is not set, we cannot read from cache
-	if (! is_cachedir_set(config))
-		return WODAN_CACHE_MISSING;
+	if (! is_cachedir_set(config)) {
+		C->status = WODAN_CACHE_MISSING;
+		return C->status;
+	}
 
-	if (! get_cache_filename(config, r, cachefilename))
-		return WODAN_CACHE_NOCACHE;
+	if (! get_cache_filename(config, r, cachefilename)) {
+		C->status = WODAN_CACHE_NOCACHE;
+		return C->status;
+	}
 
-	if (apr_file_open(&cachefile, *cachefilename, APR_READ, APR_OS_DEFAULT, r->pool) != APR_SUCCESS)
-		return WODAN_CACHE_MISSING;
+	if (apr_file_open(&cachefile, *cachefilename, APR_READ, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
+		C->status = WODAN_CACHE_MISSING;
+		return C->status;
+	}
 
 	/* Read url field, but we don't do anything with it */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
@@ -375,7 +418,8 @@ WodanCacheStatus_t cache_status(cache_state_t *cachestate)
 			apr_file_name_get(&fname, cachefile);
 			apr_file_remove(fname, r->pool);
 			apr_file_close(cachefile);
-			return WODAN_CACHE_MISSING;
+			C->status = WODAN_CACHE_MISSING;
+			return C->status;
 		}
 	}
 
@@ -386,7 +430,8 @@ WodanCacheStatus_t cache_status(cache_state_t *cachestate)
 		/* Parses a date in RFC 822  */
 		if ((cachefile_expire_time = apr_date_parse_http(buffer)) == APR_DATE_BAD) {
 			ERROR("Cachefile date not parsable. Returning \"Expired status\"");
-			return WODAN_CACHE_EXPIRED;
+			C->status = WODAN_CACHE_EXPIRED;
+			return C->status;
 		}
 
 		/* time - interval_time = time that file was created */
@@ -397,7 +442,8 @@ WodanCacheStatus_t cache_status(cache_state_t *cachestate)
 
 		if(ttl <= 0) {
 			apr_file_close(cachefile);
-			return WODAN_CACHE_EXPIRED;
+			C->status = WODAN_CACHE_EXPIRED;
+			return C->status;
 		}
 
 		// get a random number 
@@ -406,17 +452,20 @@ WodanCacheStatus_t cache_status(cache_state_t *cachestate)
 		if (ttl < (interval_time/10)) {
 			if (rand <= 0.001) {
 				apr_file_close(cachefile);
-				return WODAN_CACHE_EXPIRED;
+				C->status = WODAN_CACHE_EXPIRED;
+				return C->status;
 			}
 		} else if (ttl < (interval_time/5)) {
 			if (rand <= 0.0001) {
 				apr_file_close(cachefile);
-				return WODAN_CACHE_EXPIRED;
+				C->status = WODAN_CACHE_EXPIRED;
+				return C->status;
 			}
 		} else if (ttl < (interval_time/4)) {
 			if (rand <= 0.00005) {
 				apr_file_close(cachefile);
-				return WODAN_CACHE_EXPIRED;
+				C->status = WODAN_CACHE_EXPIRED;
+				return C->status;
 			}
 		}
 
@@ -426,14 +475,16 @@ WodanCacheStatus_t cache_status(cache_state_t *cachestate)
 				if (config->cache_404s) {
 					DEBUG("cache status [404] while Cache404s is On");
 					apr_file_close(cachefile);
-					return WODAN_CACHE_404;
+					C->status = WODAN_CACHE_404;
+					return C->status;
 				}
 				DEBUG("unlink cached [404] while Cache404s is Off");
 				const char *fname;
 				apr_file_name_get(&fname, cachefile);
 				apr_file_remove(fname, r->pool);
 				apr_file_close(cachefile);
-				return WODAN_CACHE_MISSING;
+				C->status = WODAN_CACHE_MISSING;
+				return C->status;
 			}
 		}
 		while (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
@@ -451,13 +502,15 @@ WodanCacheStatus_t cache_status(cache_state_t *cachestate)
 		}
 
 		apr_file_close(cachefile);
-		return WODAN_CACHE_PRESENT;
+		C->status = WODAN_CACHE_PRESENT;
+		return C->status;
 	}
 	apr_file_close(cachefile);
-	return WODAN_CACHE_MISSING;
+	C->status = WODAN_CACHE_MISSING;
+	return C->status;
 }
 
-int cache_read(cache_state_t *cachestate)
+int cache_read(T C)
 {
 	apr_file_t *cachefile;
 	char buffer[BUFFERSIZE];
@@ -465,16 +518,16 @@ int cache_read(cache_state_t *cachestate)
 	int content_length = 0;
 	int body_bytes_written = 0;
 	
-	request_rec *r = cachestate->r;
-	httpresponse_t *H = cachestate->httpresponse;
-	char **cachefilename = &(cachestate->cachefilename);
+	request_rec *r = C->r;
+	Response_T *H = C->R;
+	char **cachefilename = &(C->cachefilename);
 
 	// 304 short circuit
 	const char *ifmodsince;
 	if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since"))) {
 		apr_time_t if_modified_since;
 		if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
-			if (cachestate->cache_file_time <= if_modified_since) {
+			if (C->cache_file_time <= if_modified_since) {
 				H->response = HTTP_NOT_MODIFIED;
 				return OK;
 			}
@@ -521,7 +574,7 @@ int cache_read(cache_state_t *cachestate)
 	}
 
 	// fixup and dispatch the headers
-	adjust_headers_for_sending(cachestate);
+	adjust_headers_for_sending(C);
 
 	if(r->header_only)
 		return 1;
@@ -561,6 +614,28 @@ int cache_read(cache_state_t *cachestate)
 	DEBUG("%s OK content-length: %d, body_bytes: %d", *cachefilename, content_length, body_bytes_written);
 
 	return 1;
+}
+
+int cache_handler(T C)
+{
+	// see if the request can be handled from the cache.
+	WodanCacheStatus_t status = cache_status(C);
+
+	switch (status) {
+		case WODAN_CACHE_404:
+		case WODAN_CACHE_PRESENT:
+			cache_read(C);
+			break;
+
+		case WODAN_CACHE_EXPIRED:
+		case WODAN_CACHE_MISSING:
+		case WODAN_CACHE_NOCACHE:
+			//Get the httpresponse from remote server	
+			if ((cache_update(C) == DECLINED))
+				return DECLINED;
+			break;
+	}
+	return OK; 
 }
 
 static apr_time_t parse_xwodan_expire(request_rec *r,
@@ -651,7 +726,7 @@ static wodan_default_cachetime_regex_t* default_cachetime_regex_match(wodan_conf
 	
 static int find_cache_time(wodan_config_t *config,
 			 request_rec *r,
-			 httpresponse_t *H)
+			 Response_T *H)
 {
 	int cachetime;
 	wodan_default_cachetime_header_t *default_cachetime_header_config;
@@ -685,7 +760,7 @@ static int find_cache_time(wodan_config_t *config,
 }
 
 static char *get_expire_time(wodan_config_t *config,
-		      request_rec *r, httpresponse_t *H,
+		      request_rec *r, Response_T *H,
 		      int *cachetime_interval)
 {
 	int cachetime;
@@ -759,12 +834,12 @@ static void create_cache_dir(wodan_config_t *config, request_rec *r, char *cache
 /**
  * @param cachefile the cache file
  * @param r request record
- * @param httpresponse H record
+ * @param R H record
  * @param expire_time_string time at which cache expires.
  * @param expire_interval time interval between request and expire
  */
 static int write_preamble(apr_file_t *cachefile, request_rec *r,
-			  httpresponse_t *H, 
+			  Response_T *H, 
 			  char *expire_time_string,
 			  int expire_interval)
 {
@@ -786,7 +861,7 @@ static int write_preamble(apr_file_t *cachefile, request_rec *r,
 	return 0;
 }
 
-apr_file_t *cache_get_cachefile(cache_state_t *cachestate)
+apr_file_t *cache_get_cachefile(T C)
 {
 	apr_file_t *cache_file = NULL;
 	char *expire = NULL;
@@ -794,9 +869,9 @@ apr_file_t *cache_get_cachefile(cache_state_t *cachestate)
 	char *tempfile_template;
 	char *temp_dir;	
 	
-	wodan_config_t *config = cachestate->config;
-	request_rec *r = cachestate->r;
-	httpresponse_t *H = cachestate->httpresponse;
+	wodan_config_t *config = C->config;
+	request_rec *r = C->r;
+	Response_T *H = C->R;
 
 	if(!is_cachedir_set(config)) {
 		ERROR("cachedir not set.");
@@ -862,11 +937,11 @@ void cache_close_cachefile(wodan_config_t *config, request_rec *r, apr_file_t *t
 	apr_file_close(temp_cachefile);
 }		
 
-int cache_update_expiry_time(cache_state_t *cachestate)
+int cache_update_expiry_time(T C)
 {
 
-	wodan_config_t *config = cachestate->config;
-	request_rec *r = cachestate->r;
+	wodan_config_t *config = C->config;
+	request_rec *r = C->r;
 	char *cachefilename;
 	int expire_interval;
 	long int expire_time;
@@ -904,13 +979,13 @@ int cache_update_expiry_time(cache_state_t *cachestate)
 	return 0;
 }
 
-int receive_status_line(cache_state_t *cachestate, apr_socket_t *socket)
+int receive_status_line(T C, apr_socket_t *socket)
 {
 	const char *read_string;
 	const char *http_string, *status_string;
 
-	request_rec *r = cachestate->r;
-	httpresponse_t *httpresponse = cachestate->httpresponse;
+	request_rec *r = C->r;
+	Response_T *R = C->R;
 
 	read_string = connection_read_string(socket, r);
 	if (read_string == NULL)
@@ -919,9 +994,9 @@ int receive_status_line(cache_state_t *cachestate, apr_socket_t *socket)
 	http_string = ap_getword_white(r->pool, &read_string);
 	status_string = ap_getword_white(r->pool, &read_string);
 	
-	httpresponse->response = atoi(status_string);
+	R->response = atoi(status_string);
 
-	return httpresponse->response;
+	return R->response;
 }
 
 static const char* wodan_date_canon(apr_pool_t *p, 
@@ -941,22 +1016,22 @@ static const char* wodan_date_canon(apr_pool_t *p,
 }
 
 /** adjust dates to one form */
-static void adjust_dates(cache_state_t *cachestate)
+static void adjust_dates(T C)
 {
 	const char* datestr = NULL;
-	request_rec *r = cachestate->r;
-	httpresponse_t *httpresponse = cachestate->httpresponse;
+	request_rec *r = C->r;
+	Response_T *R = C->R;
 
-	if ((datestr = apr_table_get(httpresponse->headers, "Date")) != NULL)
-		apr_table_set(httpresponse->headers, "Date", wodan_date_canon(r->pool, datestr));
-	if ((datestr = apr_table_get(httpresponse->headers, "Last-Modified")) != NULL)
-		apr_table_set(httpresponse->headers, "Last-Modified", wodan_date_canon(r->pool, datestr));
-	if ((datestr = apr_table_get(httpresponse->headers, "Expires")) != NULL)
-		apr_table_set(httpresponse->headers, "Expires", wodan_date_canon(r->pool, datestr));
+	if ((datestr = apr_table_get(R->headers, "Date")) != NULL)
+		apr_table_set(R->headers, "Date", wodan_date_canon(r->pool, datestr));
+	if ((datestr = apr_table_get(R->headers, "Last-Modified")) != NULL)
+		apr_table_set(R->headers, "Last-Modified", wodan_date_canon(r->pool, datestr));
+	if ((datestr = apr_table_get(R->headers, "Expires")) != NULL)
+		apr_table_set(R->headers, "Expires", wodan_date_canon(r->pool, datestr));
 }
 
 
-int receive_headers(cache_state_t *cachestate, apr_socket_t *socket)
+int receive_headers(T C, apr_socket_t *socket)
 {
 	const char *read_header;
 	char *header; // only used as a workaround for when read_header is
@@ -965,8 +1040,8 @@ int receive_headers(cache_state_t *cachestate, apr_socket_t *socket)
 	char *key, *val;
 	int val_pos, len;
 	
-	request_rec *r = cachestate->r;
-	httpresponse_t *httpresponse = cachestate->httpresponse;
+	request_rec *r = C->r;
+	Response_T *R = C->R;
 
 	header = 0;
 	while((read_header = connection_read_string(socket, r))) {
@@ -1006,20 +1081,20 @@ int receive_headers(cache_state_t *cachestate, apr_socket_t *socket)
 			}
 			val_pos++;
 		}
-		apr_table_add(httpresponse->headers, key, val);
+		apr_table_add(R->headers, key, val);
 		free(header);
 		DEBUG("Added response header: [%s: %s]", key, val);
 	}
 	/* adjust headers */
-	ap_reverseproxy_clear_connection(r->pool, httpresponse->headers);
-	adjust_dates(cachestate);
-	httpresponse->headers = apr_table_overlay(r->pool, r->err_headers_out, 
-			httpresponse->headers);
+	ap_reverseproxy_clear_connection(r->pool, R->headers);
+	adjust_dates(C);
+	R->headers = apr_table_overlay(r->pool, r->err_headers_out, 
+			R->headers);
 
 	return OK;
 }
 
-int receive_body(cache_state_t *cachestate, apr_socket_t *socket, apr_file_t *cache_file)
+int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 {
 	char *buffer;
 	int nr_bytes_read;
@@ -1027,9 +1102,9 @@ int receive_body(cache_state_t *cachestate, apr_socket_t *socket, apr_file_t *ca
 	int body_bytes_written;
 	int backend_read_error, client_write_error, cache_write_error;
 
-	wodan_config_t *config = cachestate->config;
-	request_rec *r = cachestate->r;
-	httpresponse_t *httpresponse = cachestate->httpresponse;
+	wodan_config_t *config = C->config;
+	request_rec *r = C->r;
+	Response_T *R = C->R;
 
 	buffer = apr_pcalloc(r->pool, BUFFERSIZE);
 
@@ -1084,7 +1159,7 @@ int receive_body(cache_state_t *cachestate, apr_socket_t *socket, apr_file_t *ca
 		user_agent = apr_table_get(r->headers_in, "User-Agent");
 		if (user_agent == NULL)
 			user_agent = "unknown";
-		content_length_str = apr_table_get(httpresponse->headers,
+		content_length_str = apr_table_get(R->headers,
 						  "Content-Length");
 		content_length = (content_length_str) ? 
 			atoi(content_length_str): 0;
@@ -1295,12 +1370,12 @@ static void add_x_headers(const request_rec *r,
  * @param modified_time last modified time in cache
  */
 
-static int send_complete_request(cache_state_t *cachestate, apr_socket_t *socket,
+static int send_complete_request(T C, apr_socket_t *socket,
 		const char *dest_host_and_port, const char *dest_path, apr_table_t *out_headers)
 {
 	int result;
-	request_rec *r = cachestate->r;
-	apr_time_t modified_time = cachestate->cache_file_time;
+	request_rec *r = C->r;
+	apr_time_t modified_time = C->cache_file_time;
 
 	if(send_request(socket, r, dest_host_and_port, dest_path, modified_time) < 0)
 		return -1;
@@ -1390,35 +1465,35 @@ static int send_headers(apr_socket_t *socket, request_rec *r, const apr_table_t 
 /** receive the whole response from the backend 
  * @param connection connection to backend
  * @param r request_rec
- * @param httpresponse will hold response
+ * @param R will hold response
  * @return OK if finished
  */
-static int receive_complete_response(cache_state_t *cachestate, apr_socket_t *socket)
+static int receive_complete_response(T C, apr_socket_t *socket)
 {
 	int status = OK;
 	int receive_headers_result;
 	int receive_body_result;
 	apr_file_t *cache_file = NULL;
 
-	httpresponse_t *httpresponse = cachestate->httpresponse;
+	Response_T *R = C->R;
 
-	if ((status = receive_status_line(cachestate, socket)) == -1) {
-		httpresponse->response = HTTP_BAD_GATEWAY;
+	if ((status = receive_status_line(C, socket)) == -1) {
+		R->response = HTTP_BAD_GATEWAY;
 		return HTTP_BAD_GATEWAY;
 	}
 	
 	if (ap_is_HTTP_SERVER_ERROR(status)) { /* = 50x */
-		httpresponse->response = HTTP_BAD_GATEWAY;
+		R->response = HTTP_BAD_GATEWAY;
 		return status;
 	}
 
 	if (status == HTTP_NOT_MODIFIED) {
-		httpresponse->response = status;
+		R->response = status;
 		return status;
 	}
 	
-	if ((receive_headers_result = receive_headers(cachestate, socket))) {
-		httpresponse->response = HTTP_BAD_GATEWAY;
+	if ((receive_headers_result = receive_headers(C, socket))) {
+		R->response = HTTP_BAD_GATEWAY;
 		return receive_headers_result;
 	}
 	
@@ -1428,29 +1503,29 @@ static int receive_complete_response(cache_state_t *cachestate, apr_socket_t *so
 		case HTTP_MOVED_PERMANENTLY:
 		case HTTP_MOVED_TEMPORARILY:
 		case HTTP_SEE_OTHER:
-			cache_file = cache_get_cachefile(cachestate);
+			cache_file = cache_get_cachefile(C);
 			break;
 		default:
 			cache_file = (apr_file_t *)NULL;
 			break;
 	}
 
-	adjust_headers_for_sending(cachestate);
+	adjust_headers_for_sending(C);
 	
-	if ((receive_body_result = receive_body(cachestate, socket, cache_file))) {
-		httpresponse->response = HTTP_BAD_GATEWAY;
+	if ((receive_body_result = receive_body(C, socket, cache_file))) {
+		R->response = HTTP_BAD_GATEWAY;
 		return receive_body_result;
 	}
 
 	return status;
 }
-static apr_socket_t* connection_open (cache_state_t *cachestate, char* host, int port, int do_ssl UNUSED)
+static apr_socket_t* connection_open (T C, char* host, int port, int do_ssl UNUSED)
 {
 	apr_status_t result;
 	apr_socket_t *socket;
 	apr_sockaddr_t *server_address;
-	wodan_config_t *config = cachestate->config;
-	request_rec *r = cachestate->r;
+	wodan_config_t *config = C->config;
+	request_rec *r = C->r;
 	
 	DEBUG("Looking up host %s", host);
 	if (apr_sockaddr_info_get(&server_address, host, APR_UNSPEC, port, 0, r->pool) != APR_SUCCESS) {
@@ -1478,11 +1553,11 @@ static apr_socket_t* connection_open (cache_state_t *cachestate, char* host, int
 	return socket;
 }
 
-static wodan_proxy_destination_t* destination_longest_match(cache_state_t *cachestate)
+static wodan_proxy_destination_t* destination_longest_match(T C)
 {
 	wodan_proxy_destination_t *longest, *list;
-	wodan_config_t *config = cachestate->config;
-	char *uri = cachestate->r->unparsed_uri;
+	wodan_config_t *config = C->config;
+	char *uri = C->r->unparsed_uri;
 	int length, i;
 
 	longest = NULL;
@@ -1500,10 +1575,10 @@ static wodan_proxy_destination_t* destination_longest_match(cache_state_t *cache
 	return longest;	
 }
 
-int cache_update (cache_state_t *cachestate)
+int cache_update_fetch(T C)
 {
-	request_rec *r = cachestate->r;
-	httpresponse_t *httpresponse = cachestate->httpresponse;
+	request_rec *r = C->r;
+	Response_T *R = C->R;
 
 	int result = OK;
 	char *desthost, *destpath;
@@ -1516,7 +1591,7 @@ int cache_update (cache_state_t *cachestate)
 
 	wodan_proxy_destination_t *proxy;
 
-	if (! (proxy = destination_longest_match(cachestate)))
+	if (! (proxy = destination_longest_match(C)))
 		return DECLINED;
 
 	int l = (int) strlen(proxy->path);
@@ -1532,9 +1607,9 @@ int cache_update (cache_state_t *cachestate)
 	DEBUG("Destination: %s %d %s", desthost, destport, destpath);
 	
 	//Connect to proxyhost
-	socket = connection_open(cachestate, desthost, destport, do_ssl);
+	socket = connection_open(C, desthost, destport, do_ssl);
 	if(socket == NULL) {
-		httpresponse->response = HTTP_BAD_GATEWAY;
+		R->response = HTTP_BAD_GATEWAY;
 		return HTTP_BAD_GATEWAY;
 	}
 
@@ -1543,17 +1618,51 @@ int cache_update (cache_state_t *cachestate)
 	ap_reverseproxy_clear_connection(p, out_headers);
 	
 	/* send request */
-	if (send_complete_request(cachestate, socket, dest_host_and_port, destpath, out_headers) == -1) {
+	if (send_complete_request(C, socket, dest_host_and_port, destpath, out_headers) == -1) {
 		apr_socket_close(socket);
-		httpresponse->response = HTTP_BAD_GATEWAY;
+		R->response = HTTP_BAD_GATEWAY;
 		return HTTP_BAD_GATEWAY;
 	}	
 	
-	result = receive_complete_response(cachestate, socket);
+	result = receive_complete_response(C, socket);
 
 	apr_socket_close(socket);
 
 	return result;
+}
+	
+int cache_update (T C) 
+{
+	if ((cache_update_fetch(C) == DECLINED))
+		return DECLINED;
+
+	/* If 404 are to be cached, then already return
+	 * default 404 page here in case of a 404. */
+	if ((C->config->cache_404s) && (C->R->response == HTTP_NOT_FOUND)) {
+		C->r->status = C->R->response;
+		return OK;
+	}
+
+	/* if nothing can be received from backend, and there's
+	   nothing in cache, return the response code so
+	   ErrorDocument can handle it ... */
+	if (C->status != WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->R->response) || (C->R->response == HTTP_NOT_FOUND))) {
+		if (C->config->run_on_cache)
+			C->R->response = HTTP_NOT_FOUND;
+		C->r->status = C->R->response;
+		return OK;
+	}
+
+	if (C->status == WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->R->response) || (C->R->response == HTTP_NOT_MODIFIED))) {
+		cache_update_expiry_time(C);
+		cache_read(C);
+		C->R->response = HTTP_OK;
+		C->r->status = C->R->response;
+		return OK;
+	}
+
+	C->r->status = C->R->response;
+	return OK;
 }
 
 //EOF

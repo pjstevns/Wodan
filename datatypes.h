@@ -116,22 +116,4 @@ typedef struct wodan_hash_header_match {
 	const char *pattern;
 } wodan_hash_header_match_t;
 
-/**
- * Structure representing an httpresponse
- */
-typedef struct httpresponse {
-	char* content_type;//The content type of the data
-	apr_table_t* headers;//A table containing the headers
-	int response;//The response code
-} httpresponse_t;
-
-typedef struct wodan_cache_state {
-	apr_time_t cache_file_time;
-	char *cachefilename;
-	wodan_config_t *config;
-	request_rec *r;
-	httpresponse_t *httpresponse;
-} cache_state_t;
-
-
 #endif //_DATATYPES_H_
