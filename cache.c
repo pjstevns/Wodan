@@ -27,14 +27,6 @@
 #define MAX_CACHEFILE_PATH_LENGTH 512
 
 #define T CacheState_T
-
-typedef struct {
-	char *url;
-	int ttl;
-	apr_time_t expire;
-	int status;
-} WodanCacheHeader_T;
-
 typedef enum {
 	WODAN_CACHE_PRESENT,        /** present and fresh */
 	WODAN_CACHE_EXPIRED,/** present but expired */
@@ -47,11 +39,18 @@ typedef enum {
 /**
  * Structure representing an httpresponse
  */
-typedef struct httpresponse {
+typedef struct {
 	char* content_type;//The content type of the data
 	apr_table_t* headers;//A table containing the headers
 	int response;//The response code
 } Response_T;
+
+typedef struct {
+	char *url;
+	int ttl;
+	apr_time_t expire;
+	int status;
+} CacheHeader_T;
 
 struct T {
 	WodanCacheStatus_t status;
