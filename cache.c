@@ -627,8 +627,6 @@ int cache_read(T C)
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	DEBUG("OK content-length: %d, body_bytes: %d", content_length, body_bytes_written);
-
 	return 1;
 }
 
@@ -651,6 +649,9 @@ int cache_handler(T C)
 				return DECLINED;
 			break;
 	}
+
+	C->r->status = C->R->response;
+
 	return OK; 
 }
 
