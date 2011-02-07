@@ -56,6 +56,8 @@ typedef struct httpresponse {
 struct T {
 	WodanCacheStatus_t status;
 	apr_time_t cache_file_time;
+	int interval;
+	char expire_time[APR_RFC822_DATE_LEN];
 	char *cachefilename;
 	wodan_config_t *config;
 	request_rec *r;
@@ -164,7 +166,7 @@ static char * sha1_to_hex(request_rec *r, const unsigned char *sha1)
 	return apr_pstrdup(r->pool, buffer);
 }
 
-static int get_cache_filename(wodan_config_t *config, request_rec *r, char **filename )
+static int cache_filename(wodan_config_t *config, request_rec *r, char **filename )
 {
 	unsigned char digest[APR_SHA1_DIGESTSIZE];
 	char dir[MAX_CACHEFILE_PATH_LENGTH + 1];
@@ -365,13 +367,14 @@ void adjust_headers_for_sending(T C)
 	C->r->status = C->R->response;
 }
 
-T cache_init(request_rec *r, module *wodan_module)
+T cache_new(request_rec *r, module *wodan_module)
 {
 	T C;
 	C = apr_pcalloc(r->pool, sizeof(*C));
+	C->config = (wodan_config_t *)ap_get_module_config(r->server->module_config, wodan_module);
+	C->R = apr_pcalloc(r->pool, sizeof(Response_T));
+	C->R->headers = apr_table_make(r->pool, 0);
 	C->r = r;
-	C->config = (wodan_config_t *)ap_get_module_config(C->r->server->module_config, wodan_module);
-	C->R->headers = apr_table_make(C->r->pool, 0);
 	return C;
 }
 int cache_status(T C)
@@ -379,12 +382,13 @@ int cache_status(T C)
 	apr_file_t *cachefile;
 	char buffer[BUFFERSIZE];
 	int status;
-	int interval_time = 0;
 	long int ttl;
 	wodan_config_t *config = C->config;
 	request_rec *r = C->r;
-	apr_time_t cache_file_time = C->cache_file_time;
 	char ** cachefilename = &(C->cachefilename);
+	float rand;
+	apr_time_t cachefile_expire_time;
+
 
 	if(r->method_number != M_GET && !r->header_only) {
 		C->status = WODAN_CACHE_NOCACHE;
@@ -397,7 +401,7 @@ int cache_status(T C)
 		return C->status;
 	}
 
-	if (! get_cache_filename(config, r, cachefilename)) {
+	if (! cache_filename(config, r, cachefilename)) {
 		C->status = WODAN_CACHE_NOCACHE;
 		return C->status;
 	}
@@ -408,12 +412,80 @@ int cache_status(T C)
 	}
 
 	/* Read url field, but we don't do anything with it */
-	apr_file_gets(buffer, BUFFERSIZE, cachefile);
+	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) != APR_SUCCESS) {
+		apr_file_close(cachefile);
+		C->status = WODAN_CACHE_MISSING;
+		return C->status;
+	}
 
 	/* read expire interval field */
+	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) != APR_SUCCESS) {
+		apr_file_close(cachefile);
+		C->status = WODAN_CACHE_MISSING;
+		return C->status;
+	}
+	C->interval = atoi(buffer);
+
+	/* expire field */
+	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) != APR_SUCCESS) {
+		apr_file_close(cachefile);
+		C->status = WODAN_CACHE_MISSING;
+		return C->status;
+	}
+
+
+	/* Parses a date in RFC 822  */
+	if ((cachefile_expire_time = apr_date_parse_http(buffer)) == APR_DATE_BAD) {
+		ERROR("Cachefile date not parsable. Returning \"Expired status\"");
+		C->status = WODAN_CACHE_EXPIRED;
+		return C->status;
+	}
+
+	/* time - interval_time = time that file was created */
+	C->cache_file_time = cachefile_expire_time - apr_time_from_sec(C->interval);
+	ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
+
+	DEBUG("interval [%d], ttl [%ld]", C->interval, ttl);
+
+	if(ttl <= 0) {
+		apr_file_close(cachefile);
+		C->status = WODAN_CACHE_EXPIRED;
+		return C->status;
+	}
+
+	// get a random number 
+	rand = get_random_number(100000);
+
+	if (ttl < (C->interval/10)) {
+		if (rand <= 0.001) {
+			apr_file_close(cachefile);
+			C->status = WODAN_CACHE_EXPIRED;
+			return C->status;
+		}
+	} else if (ttl < (C->interval/5)) {
+		if (rand <= 0.0001) {
+			apr_file_close(cachefile);
+			C->status = WODAN_CACHE_EXPIRED;
+			return C->status;
+		}
+	} else if (ttl < (C->interval/4)) {
+		if (rand <= 0.00005) {
+			apr_file_close(cachefile);
+			C->status = WODAN_CACHE_EXPIRED;
+			return C->status;
+		}
+	}
+
 	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
-		if (! (interval_time = atoi(buffer))) {
-			ERROR("unlink cachefile with interval_time 0");
+		status = atoi(buffer);
+		if (status == HTTP_NOT_FOUND) {
+			if (config->cache_404s) {
+				DEBUG("cache status [404] while Cache404s is On");
+				apr_file_close(cachefile);
+				C->status = WODAN_CACHE_404;
+				return C->status;
+			}
+			DEBUG("unlink cached [404] while Cache404s is Off");
 			const char *fname;
 			apr_file_name_get(&fname, cachefile);
 			apr_file_remove(fname, r->pool);
@@ -422,91 +494,22 @@ int cache_status(T C)
 			return C->status;
 		}
 	}
-
-	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
-		float rand;
-		apr_time_t cachefile_expire_time;
-
-		/* Parses a date in RFC 822  */
-		if ((cachefile_expire_time = apr_date_parse_http(buffer)) == APR_DATE_BAD) {
-			ERROR("Cachefile date not parsable. Returning \"Expired status\"");
-			C->status = WODAN_CACHE_EXPIRED;
-			return C->status;
+	while (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
+		if (strncasecmp(buffer, "Last-Modified", 13) == 0) {
+			if (strlen(buffer) > 40) {
+				apr_time_t last_modified;
+				if ((last_modified = apr_date_parse_http(buffer+14)))
+					C->cache_file_time = last_modified;
+			}
+			break;
 		}
 
-		/* time - interval_time = time that file was created */
-		cache_file_time = cachefile_expire_time - apr_time_from_sec(interval_time);
-		ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
-
-		DEBUG("interval [%d], ttl [%ld]", interval_time, ttl);
-
-		if(ttl <= 0) {
-			apr_file_close(cachefile);
-			C->status = WODAN_CACHE_EXPIRED;
-			return C->status;
-		}
-
-		// get a random number 
-		rand = get_random_number(100000);
-
-		if (ttl < (interval_time/10)) {
-			if (rand <= 0.001) {
-				apr_file_close(cachefile);
-				C->status = WODAN_CACHE_EXPIRED;
-				return C->status;
-			}
-		} else if (ttl < (interval_time/5)) {
-			if (rand <= 0.0001) {
-				apr_file_close(cachefile);
-				C->status = WODAN_CACHE_EXPIRED;
-				return C->status;
-			}
-		} else if (ttl < (interval_time/4)) {
-			if (rand <= 0.00005) {
-				apr_file_close(cachefile);
-				C->status = WODAN_CACHE_EXPIRED;
-				return C->status;
-			}
-		}
-
-		if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
-			status = atoi(buffer);
-			if (status == HTTP_NOT_FOUND) {
-				if (config->cache_404s) {
-					DEBUG("cache status [404] while Cache404s is On");
-					apr_file_close(cachefile);
-					C->status = WODAN_CACHE_404;
-					return C->status;
-				}
-				DEBUG("unlink cached [404] while Cache404s is Off");
-				const char *fname;
-				apr_file_name_get(&fname, cachefile);
-				apr_file_remove(fname, r->pool);
-				apr_file_close(cachefile);
-				C->status = WODAN_CACHE_MISSING;
-				return C->status;
-			}
-		}
-		while (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
-			if (strncasecmp(buffer, "Last-Modified", 13) == 0) {
-				if (strlen(buffer) > 40) {
-					apr_time_t last_modified;
-					if ((last_modified = apr_date_parse_http(buffer+14)))
-						cache_file_time = last_modified;
-				}
-				break;
-			}
-
-			if ((strncmp(buffer, "\r\n", 2) == 0) || (strncmp(buffer,"\n",1) == 0))
-				break;
-		}
-
-		apr_file_close(cachefile);
-		C->status = WODAN_CACHE_PRESENT;
-		return C->status;
+		if ((strncmp(buffer, "\r\n", 2) == 0) || (strncmp(buffer,"\n",1) == 0))
+			break;
 	}
+
 	apr_file_close(cachefile);
-	C->status = WODAN_CACHE_MISSING;
+	C->status = WODAN_CACHE_PRESENT;
 	return C->status;
 }
 
@@ -538,9 +541,22 @@ int cache_read(T C)
 	/* Read url field, but we don't do anything with it */
 	apr_file_gets(buffer, BUFFERSIZE, cachefile);
 	/* same for expire interval field */
-	apr_file_gets(buffer, BUFFERSIZE, cachefile);
-	/* same for expire field */
-	apr_file_gets(buffer, BUFFERSIZE, cachefile);
+	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
+		int interval_time;
+		if (! (interval_time = atoi(buffer))) {
+			ERROR("unlink cachefile with interval_time 0");
+			const char *fname;
+			apr_file_name_get(&fname, cachefile);
+			apr_file_remove(fname, r->pool);
+			apr_file_close(cachefile);
+			C->status = WODAN_CACHE_MISSING;
+			return C->status;
+		}
+	}
+
+	/* store expire field */
+	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS)
+		apr_cpystrn(C->expire_time, buffer, sizeof(C->expire_time));
 
 	if(apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
 		H->response = atoi(buffer);
@@ -611,7 +627,7 @@ int cache_read(T C)
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	DEBUG("%s OK content-length: %d, body_bytes: %d", *cachefilename, content_length, body_bytes_written);
+	DEBUG("OK content-length: %d, body_bytes: %d", content_length, body_bytes_written);
 
 	return 1;
 }
@@ -759,30 +775,30 @@ static int find_cache_time(wodan_config_t *config,
 	return DEFAULT_CACHETIME;
 }
 
-static char *get_expire_time(wodan_config_t *config,
-		      request_rec *r, Response_T *H,
-		      int *cachetime_interval)
+static char *get_expire_time(T C)
 {
 	int cachetime;
 	char *expire_time_rfc822_string = NULL;
 	char *xwodan;
 	apr_time_t expire_time = 0;
+	request_rec *r = C->r;
 	
-	*cachetime_interval = 0;
-	cachetime = find_cache_time(config, r, H);
+	if (strlen(C->expire_time))
+		return C->expire_time;
+
+	cachetime = find_cache_time(C->config, C->r, C->R);
+
 	/* check X-Wodan header */
-	if (H && (xwodan = (char *) apr_table_get(H->headers, "X-Wodan")) != NULL) {
+	if (C->R && (xwodan = (char *) apr_table_get(C->R->headers, "X-Wodan")) != NULL) {
 		DEBUG("Found an X-Wodan header \"%s\"", xwodan);
 		if (strncasecmp(xwodan, "no-cache", 8) == 0) {
 			DEBUG("Header is 'no-cache'. Not caching..." );
 			return NULL;
 		} else if (strncasecmp(xwodan, "expire", 6) == 0) {
-			expire_time = parse_xwodan_expire(r, xwodan, 
-							  cachetime,
-							  cachetime_interval);
+			expire_time = parse_xwodan_expire(C->r, xwodan, cachetime, &(C->interval));
 			if (expire_time == 0)
 				return NULL;
-			expire_time_rfc822_string = apr_pcalloc(r->pool, APR_RFC822_DATE_LEN);
+			expire_time_rfc822_string = apr_pcalloc(C->r->pool, APR_RFC822_DATE_LEN);
 			apr_rfc822_date(expire_time_rfc822_string, expire_time);
 		} else {
 			if (cachetime == -1) {
@@ -790,28 +806,31 @@ static char *get_expire_time(wodan_config_t *config,
 				return NULL;
 			}
 		}
-		/* check X-Wodan header */
-	} else if (H && (expire_time_rfc822_string = (char *) apr_table_get(H->headers, "Expires")) != NULL) {
+
+	/* Expires header */
+	} else if (C->R && (expire_time_rfc822_string = (char *) apr_table_get(C->R->headers, "Expires")) != NULL) {
 		if (! (expire_time = apr_date_parse_http(expire_time_rfc822_string))) {
 			DEBUG("Expires header invalid [%s]", expire_time_rfc822_string);
 			expire_time_rfc822_string = NULL;
-		} else if(r->request_time > expire_time) {
+		} else if(C->r->request_time > expire_time) {
 			DEBUG("Expires header in the past [%s]", expire_time_rfc822_string);
 			expire_time_rfc822_string = NULL;
 		} else {
-			*cachetime_interval = apr_time_sec((expire_time - r->request_time));
-			DEBUG("Expires header [%s] interval [%d]", expire_time_rfc822_string, *cachetime_interval);
+			C->interval = apr_time_sec((expire_time - C->r->request_time));
+			DEBUG("Expires header [%s] interval [%d]", expire_time_rfc822_string, C->interval);
 		}
-	
 	}
 
-	if ((expire_time_rfc822_string == NULL) || (*cachetime_interval == 0)) {
-		expire_time = r->request_time + apr_time_from_sec(cachetime);
-		*cachetime_interval = cachetime;
-		DEBUG("Using default cache time [%d]", cachetime);
-		expire_time_rfc822_string = apr_pcalloc(r->pool, APR_RFC822_DATE_LEN);
+	if ((expire_time_rfc822_string == NULL) || (C->interval == 0)) {
+		expire_time = C->r->request_time + apr_time_from_sec(cachetime);
+		C->interval = cachetime;
+		expire_time_rfc822_string = apr_pcalloc(C->r->pool, APR_RFC822_DATE_LEN);
 		apr_rfc822_date(expire_time_rfc822_string, expire_time);
+		DEBUG("Using default cache time [%d] expires [%s]", cachetime, expire_time_rfc822_string);
 	}
+
+	apr_cpystrn(C->expire_time, expire_time_rfc822_string, sizeof(C->expire_time));
+	
 	return expire_time_rfc822_string;
 }
 
@@ -865,7 +884,6 @@ apr_file_t *cache_get_cachefile(T C)
 {
 	apr_file_t *cache_file = NULL;
 	char *expire = NULL;
-	int expire_interval = 0;
 	char *tempfile_template;
 	char *temp_dir;	
 	
@@ -894,9 +912,9 @@ apr_file_t *cache_get_cachefile(T C)
 	if ((char *) ap_strcasestr(r->unparsed_uri, "cache=no") != NULL)
 		return NULL;
 
-	if ((expire = get_expire_time(config, r, H, &expire_interval)) == NULL)
+	if ((expire = get_expire_time(C)) == NULL)
 		return NULL;
-	
+
 	if (apr_temp_dir_get((const char **) &temp_dir, r->pool) != APR_SUCCESS) {
 		ERROR("unable to find temp dir");
 		return NULL;
@@ -907,7 +925,7 @@ apr_file_t *cache_get_cachefile(T C)
 		return NULL;
 	
 	/* write url, expire, cache constraint and headers */
-	if (write_preamble(cache_file, r, H, expire, expire_interval) == -1) {
+	if (write_preamble(cache_file, r, H, expire, C->interval) == -1) {
 		ERROR("error writing preamble to tempcachefile");
 		apr_file_close(cache_file);
 		return NULL;
@@ -927,7 +945,7 @@ void cache_close_cachefile(wodan_config_t *config, request_rec *r, apr_file_t *t
 		return;
 	}
 
-	if (! get_cache_filename(config, r, &dst))
+	if (! cache_filename(config, r, &dst))
 		return;
 
 	create_cache_dir(config, r, dst);
@@ -950,7 +968,7 @@ int cache_update_expiry_time(T C)
 	char buffer[BUFFERSIZE];
 	apr_size_t bytes_written;
 
-	if (! get_cache_filename(config, r, &cachefilename))
+	if (! cache_filename(config, r, &cachefilename))
 		return -1;
 
 	if (apr_file_open(&cachefile, cachefilename, APR_READ|APR_WRITE, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) 
@@ -1020,14 +1038,18 @@ static void adjust_dates(T C)
 {
 	const char* datestr = NULL;
 	request_rec *r = C->r;
-	Response_T *R = C->R;
+	char *interval = apr_pcalloc(C->r->pool, APR_RFC822_DATE_LEN);
 
-	if ((datestr = apr_table_get(R->headers, "Date")) != NULL)
-		apr_table_set(R->headers, "Date", wodan_date_canon(r->pool, datestr));
-	if ((datestr = apr_table_get(R->headers, "Last-Modified")) != NULL)
-		apr_table_set(R->headers, "Last-Modified", wodan_date_canon(r->pool, datestr));
-	if ((datestr = apr_table_get(R->headers, "Expires")) != NULL)
-		apr_table_set(R->headers, "Expires", wodan_date_canon(r->pool, datestr));
+	if ((datestr = apr_table_get(C->R->headers, "Date")) != NULL)
+		apr_table_set(C->R->headers, "Date", wodan_date_canon(r->pool, datestr));
+	if ((datestr = get_expire_time(C)) != NULL)
+		apr_table_set(C->R->headers, "Expires", wodan_date_canon(r->pool, datestr));
+	if ((datestr = apr_table_get(C->R->headers, "Last-Modified")) != NULL)
+		apr_table_set(C->R->headers, "Last-Modified", wodan_date_canon(r->pool, datestr));
+	else {
+		apr_rfc822_date(interval, C->cache_file_time);
+		apr_table_set(C->R->headers, "Last-Modified", interval);
+	}
 }
 
 
@@ -1088,8 +1110,7 @@ int receive_headers(T C, apr_socket_t *socket)
 	/* adjust headers */
 	ap_reverseproxy_clear_connection(r->pool, R->headers);
 	adjust_dates(C);
-	R->headers = apr_table_overlay(r->pool, r->err_headers_out, 
-			R->headers);
+	R->headers = apr_table_overlay(r->pool, r->err_headers_out, R->headers);
 
 	return OK;
 }
