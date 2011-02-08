@@ -54,7 +54,7 @@ typedef struct {
 
 struct T {
 	WodanCacheStatus_t status;
-	apr_time_t cache_file_time;
+	apr_time_t mtime;
 	int interval;
 	char expire_time[APR_RFC822_DATE_LEN];
 	char *cachefilename;
@@ -376,6 +376,12 @@ T cache_new(request_rec *r, module *wodan_module)
 	return C;
 }
 
+void cache_mtime(T C)
+{
+	apr_finfo_t finfo;
+	apr_stat(&finfo, C->cachefilename, APR_FINFO_MTIME, C->r->pool);
+}
+
 int cache_status(T C)
 {
 	apr_file_t *cachefile;
@@ -441,7 +447,10 @@ int cache_status(T C)
 	}
 
 	/* time - interval_time = time that file was created */
-	C->cache_file_time = cachefile_expire_time - apr_time_from_sec(C->interval);
+	//FIXME:
+	cache_mtime(C);
+
+	C->mtime = cachefile_expire_time - apr_time_from_sec(C->interval);
 	ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
 
 	DEBUG("interval [%d], ttl [%ld]", C->interval, ttl);
@@ -498,7 +507,7 @@ int cache_status(T C)
 			if (strlen(buffer) > 40) {
 				apr_time_t last_modified;
 				if ((last_modified = apr_date_parse_http(buffer+14)))
-					C->cache_file_time = last_modified;
+					C->mtime = last_modified;
 			}
 			break;
 		}
@@ -528,7 +537,7 @@ int cache_read(T C)
 	if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since"))) {
 		apr_time_t if_modified_since;
 		if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
-			if (C->cache_file_time <= if_modified_since) {
+			if (C->mtime <= if_modified_since) {
 				C->R->response = HTTP_NOT_MODIFIED;
 				return OK;
 			}
@@ -1036,7 +1045,7 @@ static void adjust_dates(T C)
 	if ((datestr = apr_table_get(C->R->headers, "Last-Modified")) != NULL)
 		apr_table_set(C->R->headers, "Last-Modified", wodan_date_canon(r->pool, datestr));
 	else {
-		apr_rfc822_date(interval, C->cache_file_time);
+		apr_rfc822_date(interval, C->mtime);
 		apr_table_set(C->R->headers, "Last-Modified", interval);
 	}
 }
@@ -1384,7 +1393,7 @@ static int send_complete_request(T C, apr_socket_t *socket,
 {
 	int result;
 	request_rec *r = C->r;
-	apr_time_t modified_time = C->cache_file_time;
+	apr_time_t modified_time = C->mtime;
 
 	if(send_request(socket, r, dest_host_and_port, dest_path, modified_time) < 0)
 		return -1;
