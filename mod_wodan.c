@@ -381,7 +381,7 @@ static int wodan_handler(request_rec *r)
 	DEBUG("return: %d, httpresponse.response: %d", result, httpresponse.response);
 
 	// better safe than sorry
-	//r->status = httpresponse.response;
+	r->status = httpresponse.response;
 	
 	return result; 
 }
