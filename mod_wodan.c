@@ -322,6 +322,7 @@ static int wodan_handler(request_rec *r)
 	httpresponse_t httpresponse;
 	WodanCacheStatus_t status;
 	cache_state_t cachestate;
+	int result = OK;
 	
 	DEBUG("Processing new request: %s%s", r->hostname, r->unparsed_uri);
 
@@ -359,7 +360,7 @@ static int wodan_handler(request_rec *r)
 			/* If 404 are to be cached, then already return
 			 * default 404 page here in case of a 404. */
 			if ((config->cache_404s) && (httpresponse.response == HTTP_NOT_FOUND))
-				break;
+				return HTTP_NOT_FOUND;
 
 			/* if nothing can be received from backend, and there's
 			   nothing in cache, return the response code so
@@ -367,23 +368,22 @@ static int wodan_handler(request_rec *r)
 			if (status != WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_FOUND))) {
 				if (config->run_on_cache)
 					httpresponse.response = HTTP_NOT_FOUND;
-				break;
+				return httpresponse.response;
 			}
 
 			if (status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_MODIFIED))) {
 				cache_update_expiry_time(&cachestate);
 				cache_read(&cachestate);
-				httpresponse.response = HTTP_OK;
 				break;
 			}
 	}
 	//Return some response code
-	DEBUG("return: %d, httpresponse.response: %d",  OK, httpresponse.response);
+	DEBUG("return: %d, httpresponse.response: %d", result, httpresponse.response);
 
 	// better safe than sorry
-	r->status = httpresponse.response;
+	//r->status = httpresponse.response;
 	
-	return OK; 
+	return result; 
 }
 
 static void wodan_register_hooks(apr_pool_t *p UNUSED)

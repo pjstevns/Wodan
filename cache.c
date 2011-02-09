@@ -1411,6 +1411,13 @@ static int receive_complete_response(cache_state_t *cachestate, apr_socket_t *so
 		return status;
 	}
 
+	if (status == HTTP_NOT_FOUND) {
+		if (! cachestate->config->cache_404s) {
+			httpresponse->response = status;
+			return status;
+		}
+	}
+
 	if (status == HTTP_NOT_MODIFIED) {
 		httpresponse->response = status;
 		return status;
