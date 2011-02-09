@@ -368,7 +368,7 @@ static int wodan_handler(request_rec *r)
 			if (status != WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_FOUND))) {
 				if (config->run_on_cache)
 					httpresponse.response = HTTP_NOT_FOUND;
-				return httpresponse.response;
+				result = httpresponse.response;
 			}
 
 			if (status == WODAN_CACHE_PRESENT_EXPIRED && (ap_is_HTTP_SERVER_ERROR(httpresponse.response) || (httpresponse.response == HTTP_NOT_MODIFIED))) {
