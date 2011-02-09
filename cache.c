@@ -380,6 +380,7 @@ void cache_mtime(T C)
 {
 	apr_finfo_t finfo;
 	apr_stat(&finfo, C->cachefilename, APR_FINFO_MTIME, C->r->pool);
+	C->mtime = finfo.mtime;
 }
 
 int cache_status(T C)
@@ -438,7 +439,6 @@ int cache_status(T C)
 		return C->status;
 	}
 
-
 	/* Parses a date in RFC 822  */
 	if ((cachefile_expire_time = apr_date_parse_http(buffer)) == APR_DATE_BAD) {
 		ERROR("Cachefile date not parsable. Returning \"Expired status\"");
@@ -446,16 +446,14 @@ int cache_status(T C)
 		return C->status;
 	}
 
-	/* time - interval_time = time that file was created */
-	//FIXME:
 	cache_mtime(C);
 
-	C->mtime = cachefile_expire_time - apr_time_from_sec(C->interval);
 	ttl =  ((long int) cachefile_expire_time - (long int) r->request_time)/1000000;
+	ttl = ttl<0?0:ttl;
 
-	DEBUG("interval [%d], ttl [%ld]", C->interval, ttl);
+	DEBUG("%d %ld", C->interval, ttl);
 
-	if(ttl <= 0) {
+	if(ttl == 0) {
 		apr_file_close(cachefile);
 		C->status = WODAN_CACHE_EXPIRED;
 		return C->status;
@@ -998,22 +996,15 @@ int cache_update_expiry_time(T C)
 
 int receive_status_line(T C, apr_socket_t *socket)
 {
-	const char *read_string;
-	const char *http_string, *status_string;
+	const char *s;
 
-	request_rec *r = C->r;
-	Response_T *R = C->R;
-
-	read_string = connection_read_string(socket, r);
-	if (read_string == NULL)
+	if (! (s = connection_read_string(socket, C->r)))
 		return -1;
 
-	http_string = ap_getword_white(r->pool, &read_string);
-	status_string = ap_getword_white(r->pool, &read_string);
-	
-	R->response = atoi(status_string);
+	ap_getword_white(C->r->pool, &s);
+	C->R->response = atoi(ap_getword_white(C->r->pool, &s));
 
-	return R->response;
+	return C->R->response;
 }
 
 static const char* wodan_date_canon(apr_pool_t *p, const char *input_date_string)
@@ -1035,19 +1026,16 @@ static const char* wodan_date_canon(apr_pool_t *p, const char *input_date_string
 static void adjust_dates(T C)
 {
 	const char* datestr = NULL;
-	request_rec *r = C->r;
 	char *interval = apr_pcalloc(C->r->pool, APR_RFC822_DATE_LEN);
 
-	if ((datestr = apr_table_get(C->R->headers, "Date")) != NULL)
-		apr_table_set(C->R->headers, "Date", wodan_date_canon(r->pool, datestr));
-	if ((datestr = get_expire_time(C)) != NULL)
-		apr_table_set(C->R->headers, "Expires", wodan_date_canon(r->pool, datestr));
-	if ((datestr = apr_table_get(C->R->headers, "Last-Modified")) != NULL)
-		apr_table_set(C->R->headers, "Last-Modified", wodan_date_canon(r->pool, datestr));
-	else {
-		apr_rfc822_date(interval, C->mtime);
-		apr_table_set(C->R->headers, "Last-Modified", interval);
-	}
+	if ((datestr = apr_table_get(C->R->headers, "Date")))
+		apr_table_set(C->R->headers, "Date", wodan_date_canon(C->r->pool, datestr));
+
+	if ((datestr = get_expire_time(C)))
+		apr_table_set(C->R->headers, "Expires", wodan_date_canon(C->r->pool, datestr));
+
+	apr_rfc822_date(interval, C->mtime);
+	apr_table_set(C->R->headers, "Last-Modified", interval);
 }
 
 
@@ -1061,10 +1049,9 @@ int receive_headers(T C, apr_socket_t *socket)
 	int val_pos, len;
 	
 	request_rec *r = C->r;
-	Response_T *R = C->R;
 
 	header = 0;
-	while((read_header = connection_read_string(socket, r))) {
+	while((read_header = connection_read_string(socket, C->r))) {
 		/* if read_header is NULL, this signals an error. Escape from here right
 		 * away in that case */
 		if (read_header == NULL)
@@ -1088,8 +1075,8 @@ int receive_headers(T C, apr_socket_t *socket)
 			header = strcat(header, read_header);
 		}
 
-		key = ap_getword(r->pool, header ? (const char **)&header: &read_header, ':');
-		val = apr_pstrdup(r->pool, header ? header : read_header);
+		key = ap_getword(C->r->pool, header ? (const char **)&header: &read_header, ':');
+		val = apr_pstrdup(C->r->pool, header ? header : read_header);
 		val = util_skipspaces(val);
 
 		// strip whitespace from start and end.
@@ -1101,14 +1088,14 @@ int receive_headers(T C, apr_socket_t *socket)
 			}
 			val_pos++;
 		}
-		apr_table_add(R->headers, key, val);
+		apr_table_add(C->R->headers, key, val);
 		free(header);
 		DEBUG("Added response header: [%s: %s]", key, val);
 	}
 	/* adjust headers */
-	ap_reverseproxy_clear_connection(r->pool, R->headers);
+	ap_reverseproxy_clear_connection(C->r->pool, C->R->headers);
 	adjust_dates(C);
-	R->headers = apr_table_overlay(r->pool, r->err_headers_out, R->headers);
+	C->R->headers = apr_table_overlay(C->r->pool, C->r->err_headers_out, C->R->headers);
 
 	return OK;
 }
@@ -1122,7 +1109,6 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 	int backend_read_error, client_write_error, cache_write_error;
 
 	request_rec *r = C->r;
-	Response_T *R = C->R;
 
 	buffer = apr_pcalloc(r->pool, BUFFERSIZE);
 
@@ -1133,7 +1119,7 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 
 	while(1)
 	{
-		nr_bytes_read = connection_read_bytes(socket, r, buffer, BUFFERSIZE);
+		nr_bytes_read = connection_read_bytes(socket, C->r, buffer, BUFFERSIZE);
 
 		DEBUG("read %d bytes from backend", nr_bytes_read);
 		
@@ -1150,8 +1136,8 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 			}
 		}
 					
-		if (!r->header_only) {
-			writtenbytes = ap_rwrite(buffer, nr_bytes_read, r);
+		if (!C->r->header_only) {
+			writtenbytes = ap_rwrite(buffer, nr_bytes_read, C->r);
 			body_bytes_written += writtenbytes;
 			/* escape from loop if there's an error */
 			if (writtenbytes < 0 || 
@@ -1174,13 +1160,11 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 		const char *content_length_str;
 		int content_length;
 		
-		user_agent = apr_table_get(r->headers_in, "User-Agent");
+		user_agent = apr_table_get(C->r->headers_in, "User-Agent");
 		if (user_agent == NULL)
 			user_agent = "unknown";
-		content_length_str = apr_table_get(R->headers,
-						  "Content-Length");
-		content_length = (content_length_str) ? 
-			atoi(content_length_str): 0;
+		content_length_str = apr_table_get(C->R->headers, "Content-Length");
+		content_length = (content_length_str) ?  atoi(content_length_str): 0;
 					
 		ERROR("Error writing to client. " 
 				"Bytes written/total bytes = %d/%d, " 
@@ -1190,7 +1174,7 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 
 	if (cache_write_error) {
 		ERROR("Error writing to cache file");
-		ap_rflush(r);
+		ap_rflush(C->r);
 		return HTTP_BAD_GATEWAY;
 	}
 
@@ -1202,7 +1186,7 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 	/* everything went well. Close cache file and make sure
 	 * all content goes to the client */
 	cache_close_cachefile(C, cache_file);
-	ap_rflush(r);
+	ap_rflush(C->r);
 
 	return OK;
 }
@@ -1211,14 +1195,9 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
  * @param connection connection struct
  * @param r request record
  * @param dest_path destination path
- * @param modified_time set 'If-Modified-Since'-header 
  * @retval -1 on error.
  */
-static int send_request(apr_socket_t *socket, 
-			request_rec *r, const char *dest_host,
-			const char *dest_path, apr_time_t modified_time);
-
-
+static int send_request(T, apr_socket_t *, const char *, const char *);
 
 /**
  * send headers to client. Also sends the empty newline after headers.
@@ -1282,18 +1261,15 @@ void ap_reverseproxy_clear_connection(apr_pool_t *p, apr_table_t *headers)
 
 static apr_status_t get_destination_parts(apr_pool_t *p,
 			  const char *proxy_url, const char *uri,
-			  char **dest_host,
-			  int *dest_port, char **dest_path,
-			  char **dest_host_and_port,
-			  int *do_ssl) 
+			  char **dest_host, int *dest_port, char **dest_path,
+			  char **dest_host_and_port, int *do_ssl) 
 {
 	apr_uri_t uptr;
 	char *tmp_path;
 	int uri_parse_retval;
 	
-	if ((uri_parse_retval = apr_uri_parse(p, proxy_url, &uptr)) != APR_SUCCESS) {
+	if ((uri_parse_retval = apr_uri_parse(p, proxy_url, &uptr)) != APR_SUCCESS)
 		return uri_parse_retval;
-	}
 	
 	*do_ssl = (strncmp(uptr.scheme, "https", 5) == 0) ? 1 : 0;
 
@@ -1307,13 +1283,14 @@ static apr_status_t get_destination_parts(apr_pool_t *p,
 	/* for some reason, uptr.path isn't always at least '/' (the
 	 * O'Reilly book says it should), so we have to check for that */
 	if (uptr.path == NULL) 
-	  tmp_path = apr_pstrdup(p, "");
+		tmp_path = apr_pstrdup(p, "");
 	else {
-	  tmp_path = apr_pstrdup(p, uptr.path);
-	  /* tmp_path is "/" or longer, always ending in '/'. We need to
-	   * strip this / */
-	  if (tmp_path[(int) strlen(tmp_path) - 1] == '/') 
-		  tmp_path[(int) strlen(tmp_path) - 1] = '\0';
+		tmp_path = apr_pstrdup(p, uptr.path);
+		size_t l = strlen(tmp_path)-1;
+		/* tmp_path is "/" or longer, always ending in '/'. We need to
+		 * strip this / */
+		if (tmp_path[l] == '/') 
+			tmp_path[l] = '\0';
 	}
 
 	*dest_path = apr_pstrcat(p, tmp_path, uri, NULL);
@@ -1330,17 +1307,16 @@ static apr_status_t get_destination_parts(apr_pool_t *p,
 
 static int send_request_body(apr_socket_t *socket, request_rec *r)
 {
-	int result;
+	int n;
 
-	if ((result = ap_setup_client_block(r, REQUEST_CHUNKED_ERROR)))
-		return result;
+	if ((n = ap_setup_client_block(r, REQUEST_CHUNKED_ERROR)))
+		return n;
 	
 	if (ap_should_client_block(r)) {
-		int nr_bytes_read;
 		char buffer[BUFFERSIZE];
 
-		while ((nr_bytes_read = ap_get_client_block(r, buffer, BUFFERSIZE)) > 0) { 
-			if (connection_write_bytes(socket, r, buffer, nr_bytes_read) == -1) 
+		while ((n = ap_get_client_block(r, buffer, BUFFERSIZE)) > 0) { 
+			if (connection_write_bytes(socket, r, buffer, n) == -1) 
 				return -1;
 		}
 	}
@@ -1353,25 +1329,24 @@ static int send_request_body(apr_socket_t *socket, request_rec *r)
  * @param out_headers_to_backend table of headers to send to the backend.
  */
 
-static void add_x_headers(const request_rec *r,
-		   apr_table_t *out_headers_to_backend)
+static void add_x_headers(const request_rec *r, apr_table_t *out_headers_to_backend)
 {
 	const char *temp;
 
 	/* Add X-Forwarded-For so the backend can find out where the 
 	 * request came from. If there's already a X-Forwarded-For
 	 * header, the remote_ip is added to that header */
-	apr_table_mergen(out_headers_to_backend, "X-Forwarded-For",
-			r->connection->remote_ip);
+	apr_table_mergen(out_headers_to_backend, "X-Forwarded-For", r->connection->remote_ip);
+
 	/* With X-Forwarded-Host, the backend can determine the original
 	 * Host: header send to Wodan */
 	if ((temp = apr_table_get(r->headers_in, "Host"))) 
-		apr_table_mergen(out_headers_to_backend, "X-Forwarded-Host",
-				temp);
+		apr_table_mergen(out_headers_to_backend, "X-Forwarded-Host", temp);
+
 	/* Add this server (the server Wodan runs on) as the X-Forwarded-Server,
 	   The backend can determine the frontend servername by this. */
-	apr_table_mergen(out_headers_to_backend, "X-Forwarded-Server",
-			r->server->server_hostname);
+	apr_table_mergen(out_headers_to_backend, "X-Forwarded-Server", r->server->server_hostname);
+
 	/* Pass the protocol used for client<->wodan communication through
 	 * to the backend. */
 	apr_table_set(out_headers_to_backend, "X-Wodan-Protocol", r->protocol);
@@ -1385,53 +1360,45 @@ static void add_x_headers(const request_rec *r,
  * @param dest_host destination host
  * @param dest_path destination path
  * @param out_headers headers sent to backend
- * @param modified_time last modified time in cache
  */
 
 static int send_complete_request(T C, apr_socket_t *socket,
 		const char *dest_host_and_port, const char *dest_path, apr_table_t *out_headers)
 {
 	int result;
-	request_rec *r = C->r;
-	apr_time_t modified_time = C->mtime;
 
-	if(send_request(socket, r, dest_host_and_port, dest_path, modified_time) < 0)
+	if(send_request(C, socket, dest_host_and_port, dest_path) < 0)
 		return -1;
-	add_x_headers(r, out_headers);
+
+	add_x_headers(C->r, out_headers);
 	apr_table_set(out_headers, "Connection", "close");
 	apr_table_unset(out_headers, "Via");
-	if (send_headers(socket, r, out_headers) == -1)
+	if (send_headers(socket, C->r, out_headers) == -1)
 		return -1;
 
-	if((result = send_request_body(socket, r)))
+	if((result = send_request_body(socket, C->r)))
 		return result;
 	
 	return OK;
 }
 
-static int send_request(apr_socket_t *socket, request_rec *r,
-		const char *dest, const char *path, apr_time_t modified_time) 
+static int send_request(T C, apr_socket_t *socket, const char *dest, const char *path) 
 {
 	const char *request;
-	const char *header;
 	
-	request = apr_psprintf(r->pool, "%s %s HTTP/1.0%s", r->method, path, CRLF);
-	if (connection_write_string(socket, r, request) == -1)
+	request = apr_psprintf(C->r->pool, "%s %s HTTP/1.0%sHost: %s%s", C->r->method, path, CRLF, dest, CRLF);
+	if (connection_write_string(socket, C->r, request) == -1)
 		return -1;
 
-	header = apr_psprintf(r->pool, "Host: %s%s", dest, CRLF);
-	if (connection_write_string(socket, r, header) == -1)
-		return -1;
-
-	if (modified_time != APR_DATE_BAD) {
+	if (C->mtime != APR_DATE_BAD) {
 		char if_modified[APR_RFC822_DATE_LEN];
 		const char *if_modified_header;
-		if (apr_rfc822_date(&(if_modified[0]), modified_time) != APR_SUCCESS) 
+		if (apr_rfc822_date(&(if_modified[0]), C->mtime) != APR_SUCCESS) 
 			return -1;
 			
-		if_modified_header = apr_psprintf(r->pool, "If-Modified-Since: %s%s", if_modified, CRLF);
+		if_modified_header = apr_psprintf(C->r->pool, "If-Modified-Since: %s%s", if_modified, CRLF);
 		
-		if (connection_write_string(socket, r, if_modified_header) == -1)
+		if (connection_write_string(socket, C->r, if_modified_header) == -1)
 			return -1;
 	} 
 	return OK;
