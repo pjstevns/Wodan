@@ -655,9 +655,7 @@ int cache_handler(T C)
 			break;
 	}
 
-	C->r->status = C->R->response;
-
-	return OK; 
+	return C->r->status = C->R->response;
 }
 
 static apr_time_t parse_xwodan_expire(request_rec *r,
@@ -1612,10 +1610,8 @@ int cache_update (T C)
 
 	/* If 404 are to be cached, then already return
 	 * default 404 page here in case of a 404. */
-	if ((C->config->cache_404s) && (C->R->response == HTTP_NOT_FOUND)) {
-		C->r->status = C->R->response;
-		return OK;
-	}
+	if ((C->config->cache_404s) && (C->R->response == HTTP_NOT_FOUND))
+		return C->r->status = C->R->response;
 
 	/* if nothing can be received from backend, and there's
 	   nothing in cache, return the response code so
@@ -1623,20 +1619,16 @@ int cache_update (T C)
 	if (C->status != WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->R->response) || (C->R->response == HTTP_NOT_FOUND))) {
 		if (C->config->run_on_cache)
 			C->R->response = HTTP_NOT_FOUND;
-		C->r->status = C->R->response;
-		return OK;
+		return C->r->status = C->R->response;
 	}
 
 	if (C->status == WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->R->response) || (C->R->response == HTTP_NOT_MODIFIED))) {
 		cache_update_expiry_time(C);
 		cache_read(C);
-		C->R->response = HTTP_OK;
-		C->r->status = C->R->response;
-		return OK;
+		return C->r->status = C->R->response = HTTP_OK;
 	}
 
-	C->r->status = C->R->response;
-	return OK;
+	return C->r->status = C->R->response;
 }
 
 //EOF
