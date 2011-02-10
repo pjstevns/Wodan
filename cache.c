@@ -42,7 +42,6 @@ typedef enum {
 typedef struct {
 	char* content_type;//The content type of the data
 	apr_table_t* headers;//A table containing the headers
-	int response;//The response code
 } Response_T;
 
 typedef struct {
@@ -362,7 +361,6 @@ void adjust_headers_for_sending(T C)
 	
 	C->r->headers_out = C->R->headers;
 	C->r->content_type = apr_table_get(C->R->headers, "Content-Type");
-	C->r->status = C->R->response;
 }
 
 T cache_new(request_rec *r, module *wodan_module)
@@ -536,7 +534,7 @@ int cache_read(T C)
 		apr_time_t if_modified_since;
 		if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
 			if (C->mtime <= if_modified_since) {
-				C->R->response = HTTP_NOT_MODIFIED;
+				C->r->status = HTTP_NOT_MODIFIED;
 				return OK;
 			}
 		}
@@ -564,7 +562,7 @@ int cache_read(T C)
 		apr_cpystrn(C->expire_time, buffer, sizeof(C->expire_time));
 
 	if(apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
-		C->R->response = atoi(buffer);
+		C->r->status = atoi(buffer);
 	} else {
 		//Remove file and return 0
 		apr_file_close(cachefile);
@@ -655,7 +653,7 @@ int cache_handler(T C)
 			break;
 	}
 
-	return C->r->status = C->R->response;
+	return C->r->status;
 }
 
 static apr_time_t parse_xwodan_expire(request_rec *r,
@@ -862,17 +860,15 @@ static void create_cache_dir(T C, char *cachefilename)
  */
 static int write_preamble(T C, apr_file_t *cachefile, char *expire_time_string)
 {
-	request_rec *r = C->r;
-	Response_T *H = C->R;
 	int expire_interval = C->interval;
-	apr_file_printf(cachefile, "%s%s%s", r->hostname, r->unparsed_uri, CRLF);
+	apr_file_printf(cachefile, "%s%s%s", C->r->hostname, C->r->unparsed_uri, CRLF);
 	apr_file_printf(cachefile, "%d%s", expire_interval, CRLF);
 	apr_file_printf(cachefile, "%s%s", expire_time_string, CRLF);
-	apr_file_printf(cachefile, "%d%s", H->response, CRLF);
+	apr_file_printf(cachefile, "%d%s", C->r->status, CRLF);
 	/* TODO add error checking */
 	{
 		int i;
-		const apr_array_header_t *headers_array = apr_table_elts(H->headers);
+		const apr_array_header_t *headers_array = apr_table_elts(C->R->headers);
 		apr_table_entry_t *headers_elts = (apr_table_entry_t *) headers_array->elts;
 		
 		for(i = 0; i < headers_array->nelts; i++) {
@@ -905,8 +901,8 @@ apr_file_t *cache_get_cachefile(T C)
 		return NULL;
 	}
 	
-	if (!is_response_cacheable(C->R->response, C->config->cache_404s)) {
-		DEBUG("Response isn't cacheable: %d", C->R->response);
+	if (!is_response_cacheable(C->r->status, C->config->cache_404s)) {
+		DEBUG("Response isn't cacheable: %d", C->r->status);
 		return NULL;
 	}
 	if ((char *) ap_strcasestr(C->r->unparsed_uri, "cache=no") != NULL)
@@ -951,7 +947,7 @@ void cache_close_cachefile(T C, apr_file_t *temp_cachefile)
 	apr_file_close(temp_cachefile);
 }		
 
-int cache_update_expiry_time(T C)
+int cache_update_ttl(T C)
 {
 
 	request_rec *r = C->r;
@@ -1000,9 +996,7 @@ int receive_status_line(T C, apr_socket_t *socket)
 		return -1;
 
 	ap_getword_white(C->r->pool, &s);
-	C->R->response = atoi(ap_getword_white(C->r->pool, &s));
-
-	return C->R->response;
+	return C->r->status = atoi(ap_getword_white(C->r->pool, &s));
 }
 
 static const char* wodan_date_canon(apr_pool_t *p, const char *input_date_string)
@@ -1453,23 +1447,17 @@ static int receive_complete_response(T C, apr_socket_t *socket)
 	int receive_body_result;
 	apr_file_t *cache_file = NULL;
 
-	if ((status = receive_status_line(C, socket)) == -1) {
-		C->R->response = HTTP_BAD_GATEWAY;
-		return HTTP_BAD_GATEWAY;
-	}
+	if ((status = receive_status_line(C, socket)) == -1)
+		return C->r->status = HTTP_BAD_GATEWAY;
 	
-	if (ap_is_HTTP_SERVER_ERROR(status)) { /* = 50x */
-		C->R->response = HTTP_BAD_GATEWAY;
-		return status;
-	}
+	if (ap_is_HTTP_SERVER_ERROR(status)) /* = 50x */
+		return C->r->status = HTTP_BAD_GATEWAY;
 
-	if (status == HTTP_NOT_MODIFIED) {
-		C->R->response = status;
-		return status;
-	}
+	if (status == HTTP_NOT_MODIFIED)
+		return C->r->status = status;
 	
 	if ((receive_headers_result = receive_headers(C, socket))) {
-		C->R->response = HTTP_BAD_GATEWAY;
+		C->r->status = HTTP_BAD_GATEWAY;
 		return receive_headers_result;
 	}
 	
@@ -1489,7 +1477,7 @@ static int receive_complete_response(T C, apr_socket_t *socket)
 	adjust_headers_for_sending(C);
 	
 	if ((receive_body_result = receive_body(C, socket, cache_file))) {
-		C->R->response = HTTP_BAD_GATEWAY;
+		C->r->status = HTTP_BAD_GATEWAY;
 		return receive_body_result;
 	}
 
@@ -1580,10 +1568,8 @@ int cache_update_fetch(T C)
 	
 	//Connect to proxyhost
 	socket = connection_open(C, desthost, destport, do_ssl);
-	if(socket == NULL) {
-		C->R->response = HTTP_BAD_GATEWAY;
-		return HTTP_BAD_GATEWAY;
-	}
+	if(socket == NULL)
+		return C->r->status = HTTP_BAD_GATEWAY;
 
 	//Copy headers and make adjustments
 	out_headers = apr_table_copy(C->r->pool, C->r->headers_in);
@@ -1592,8 +1578,7 @@ int cache_update_fetch(T C)
 	/* send request */
 	if (send_complete_request(C, socket, dest_host_and_port, destpath, out_headers) == -1) {
 		apr_socket_close(socket);
-		C->R->response = HTTP_BAD_GATEWAY;
-		return HTTP_BAD_GATEWAY;
+		return C->r->status = HTTP_BAD_GATEWAY;
 	}	
 	
 	result = receive_complete_response(C, socket);
@@ -1610,25 +1595,25 @@ int cache_update (T C)
 
 	/* If 404 are to be cached, then already return
 	 * default 404 page here in case of a 404. */
-	if ((C->config->cache_404s) && (C->R->response == HTTP_NOT_FOUND))
-		return C->r->status = C->R->response;
+	if ((C->config->cache_404s) && (C->r->status == HTTP_NOT_FOUND))
+		return C->r->status;
 
 	/* if nothing can be received from backend, and there's
 	   nothing in cache, return the response code so
 	   ErrorDocument can handle it ... */
-	if (C->status != WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->R->response) || (C->R->response == HTTP_NOT_FOUND))) {
+	if (C->status != WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->r->status) || (C->r->status == HTTP_NOT_FOUND))) {
 		if (C->config->run_on_cache)
-			C->R->response = HTTP_NOT_FOUND;
-		return C->r->status = C->R->response;
+			C->r->status = HTTP_NOT_FOUND;
+		return C->r->status;
 	}
 
-	if (C->status == WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->R->response) || (C->R->response == HTTP_NOT_MODIFIED))) {
-		cache_update_expiry_time(C);
+	if (C->status == WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->r->status) || (C->r->status == HTTP_NOT_MODIFIED))) {
+		cache_update_ttl(C);
 		cache_read(C);
-		return C->r->status = C->R->response = HTTP_OK;
+		return C->r->status = HTTP_OK;
 	}
 
-	return C->r->status = C->R->response;
+	return C->r->status;
 }
 
 //EOF
