@@ -348,10 +348,28 @@ static void apply_proxy_pass_reverse(T C)
 		apr_table_set(headers, "Content-Location", wodan_location_reverse_map(alias, url, r));
 }
 
+static char *get_expire_time(T);
+static const char* wodan_date_canon(apr_pool_t *, const char *);
 
+/** adjust dates to one form */
+static void adjust_dates(T C)
+{
+	const char* datestr = NULL;
+	char *interval = apr_pcalloc(C->r->pool, APR_RFC822_DATE_LEN);
+
+	if ((datestr = apr_table_get(C->R->headers, "Date")))
+		apr_table_set(C->R->headers, "Date", wodan_date_canon(C->r->pool, datestr));
+
+	if ((datestr = get_expire_time(C)))
+		apr_table_set(C->R->headers, "Expires", wodan_date_canon(C->r->pool, datestr));
+
+	apr_rfc822_date(interval, C->mtime);
+	apr_table_set(C->R->headers, "Last-Modified", interval);
+}
 
 void adjust_headers_for_sending(T C)
 {
+	adjust_dates(C);
 	/* do more adjustments to the headers. This used to be in 
 	   mod_reverseproxy.c */
 	apr_table_unset(C->R->headers, "X-Wodan");
@@ -394,54 +412,43 @@ int cache_status(T C)
 	apr_time_t cachefile_expire_time;
 
 
-	if(r->method_number != M_GET && !r->header_only) {
-		C->status = WODAN_CACHE_NOCACHE;
-		return C->status;
-	}
+	if(r->method_number != M_GET && !r->header_only)
+		return C->status = WODAN_CACHE_NOCACHE;
 
 	// if the CacheDir directive is not set, we cannot read from cache
-	if (! is_cachedir_set(C)) {
-		C->status = WODAN_CACHE_MISSING;
-		return C->status;
-	}
+	if (! is_cachedir_set(C))
+		return C->status = WODAN_CACHE_MISSING;
 
-	if (! cache_filename(C, cachefilename)) {
-		C->status = WODAN_CACHE_NOCACHE;
-		return C->status;
-	}
+	if (! cache_filename(C, cachefilename))
+		return C->status = WODAN_CACHE_NOCACHE;
 
-	if (apr_file_open(&cachefile, *cachefilename, APR_READ, APR_OS_DEFAULT, r->pool) != APR_SUCCESS) {
-		C->status = WODAN_CACHE_MISSING;
-		return C->status;
-	}
+	if (apr_file_open(&cachefile, *cachefilename, APR_READ, APR_OS_DEFAULT, r->pool) != APR_SUCCESS)
+		return C->status = WODAN_CACHE_MISSING;
 
 	/* Read url field, but we don't do anything with it */
 	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) != APR_SUCCESS) {
 		apr_file_close(cachefile);
-		C->status = WODAN_CACHE_MISSING;
-		return C->status;
+		return C->status = WODAN_CACHE_MISSING;
 	}
 
 	/* read expire interval field */
 	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) != APR_SUCCESS) {
 		apr_file_close(cachefile);
-		C->status = WODAN_CACHE_MISSING;
-		return C->status;
+		return C->status = WODAN_CACHE_MISSING;
 	}
+
 	C->interval = atoi(buffer);
 
 	/* expire field */
 	if (apr_file_gets(buffer, BUFFERSIZE, cachefile) != APR_SUCCESS) {
 		apr_file_close(cachefile);
-		C->status = WODAN_CACHE_MISSING;
-		return C->status;
+		return C->status = WODAN_CACHE_MISSING;
 	}
 
 	/* Parses a date in RFC 822  */
 	if ((cachefile_expire_time = apr_date_parse_http(buffer)) == APR_DATE_BAD) {
 		ERROR("Cachefile date not parsable. Returning \"Expired status\"");
-		C->status = WODAN_CACHE_EXPIRED;
-		return C->status;
+		return C->status = WODAN_CACHE_EXPIRED;
 	}
 
 	cache_mtime(C);
@@ -453,8 +460,7 @@ int cache_status(T C)
 
 	if(ttl == 0) {
 		apr_file_close(cachefile);
-		C->status = WODAN_CACHE_EXPIRED;
-		return C->status;
+		return C->status = WODAN_CACHE_EXPIRED;
 	}
 
 	// get a random number 
@@ -463,20 +469,17 @@ int cache_status(T C)
 	if (ttl < (C->interval/10)) {
 		if (rand <= 0.001) {
 			apr_file_close(cachefile);
-			C->status = WODAN_CACHE_EXPIRED;
-			return C->status;
+			return C->status = WODAN_CACHE_EXPIRED;
 		}
 	} else if (ttl < (C->interval/5)) {
 		if (rand <= 0.0001) {
 			apr_file_close(cachefile);
-			C->status = WODAN_CACHE_EXPIRED;
-			return C->status;
+			return C->status = WODAN_CACHE_EXPIRED;
 		}
 	} else if (ttl < (C->interval/4)) {
 		if (rand <= 0.00005) {
 			apr_file_close(cachefile);
-			C->status = WODAN_CACHE_EXPIRED;
-			return C->status;
+			return C->status = WODAN_CACHE_EXPIRED;
 		}
 	}
 
@@ -486,16 +489,14 @@ int cache_status(T C)
 			if (config->cache_404s) {
 				DEBUG("cache status [404] while Cache404s is On");
 				apr_file_close(cachefile);
-				C->status = WODAN_CACHE_404;
-				return C->status;
+				return C->status = WODAN_CACHE_404;
 			}
 			DEBUG("unlink cached [404] while Cache404s is Off");
 			const char *fname;
 			apr_file_name_get(&fname, cachefile);
 			apr_file_remove(fname, r->pool);
 			apr_file_close(cachefile);
-			C->status = WODAN_CACHE_MISSING;
-			return C->status;
+			return C->status = WODAN_CACHE_MISSING;
 		}
 	}
 	while (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
@@ -513,8 +514,7 @@ int cache_status(T C)
 	}
 
 	apr_file_close(cachefile);
-	C->status = WODAN_CACHE_PRESENT;
-	return C->status;
+	return C->status = WODAN_CACHE_PRESENT;
 }
 
 int cache_read(T C)
@@ -533,6 +533,7 @@ int cache_read(T C)
 	if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since"))) {
 		apr_time_t if_modified_since;
 		if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
+			DEBUG("if_modified_since [%ld], mtime [%ld]", if_modified_since, C->mtime);
 			if (C->mtime <= if_modified_since) {
 				C->r->status = HTTP_NOT_MODIFIED;
 				return OK;
@@ -553,7 +554,7 @@ int cache_read(T C)
 			apr_file_remove(fname, r->pool);
 			apr_file_close(cachefile);
 			C->status = WODAN_CACHE_MISSING;
-			return C->status;
+			return OK;
 		}
 	}
 
@@ -567,7 +568,7 @@ int cache_read(T C)
 		//Remove file and return 0
 		apr_file_close(cachefile);
 		apr_file_remove(*cachefilename, r->pool);
-		return 0;
+		return OK;
 	}
 
 	// read the headers
@@ -608,10 +609,9 @@ int cache_read(T C)
 
 		bytes_written = ap_rwrite(buffer, bytes_read, r);
 		body_bytes_written += bytes_written;
-		if (((int) bytes_read != bytes_written) || bytes_written == -1) {
+		if (((int) bytes_read != bytes_written) || bytes_written == -1)
 			write_error = 1;
-		}
-		if(bytes_read < BUFFERSIZE)
+		if (bytes_read < BUFFERSIZE)
 			break;
 	}
 
@@ -868,12 +868,11 @@ static int write_preamble(T C, apr_file_t *cachefile, char *expire_time_string)
 	/* TODO add error checking */
 	{
 		int i;
-		const apr_array_header_t *headers_array = apr_table_elts(C->R->headers);
-		apr_table_entry_t *headers_elts = (apr_table_entry_t *) headers_array->elts;
+		const apr_array_header_t *headers = apr_table_elts(C->R->headers);
+		apr_table_entry_t *elts = (apr_table_entry_t *) headers->elts;
 		
-		for(i = 0; i < headers_array->nelts; i++) {
-			apr_file_printf(cachefile, "%s: %s%s", headers_elts[i].key, headers_elts[i].val, CRLF);
-		}
+		for(i = 0; i < headers->nelts; i++)
+			apr_file_printf(cachefile, "%s: %s%s", elts[i].key, elts[i].val, CRLF);
 	}
 	apr_file_printf(cachefile, "%s", CRLF);
 	return 0;
@@ -1013,23 +1012,6 @@ static const char* wodan_date_canon(apr_pool_t *p, const char *input_date_string
 
 	return rfc822_date_string;
 }
-
-/** adjust dates to one form */
-static void adjust_dates(T C)
-{
-	const char* datestr = NULL;
-	char *interval = apr_pcalloc(C->r->pool, APR_RFC822_DATE_LEN);
-
-	if ((datestr = apr_table_get(C->R->headers, "Date")))
-		apr_table_set(C->R->headers, "Date", wodan_date_canon(C->r->pool, datestr));
-
-	if ((datestr = get_expire_time(C)))
-		apr_table_set(C->R->headers, "Expires", wodan_date_canon(C->r->pool, datestr));
-
-	apr_rfc822_date(interval, C->mtime);
-	apr_table_set(C->R->headers, "Last-Modified", interval);
-}
-
 
 int receive_headers(T C, apr_socket_t *socket)
 {

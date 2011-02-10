@@ -14,21 +14,26 @@ setup:
 
 """
 
-def request(connection, method, path):
-    connection.request(method, path)
+def request(type, method, path, body=None, headers=None):
+    if not headers: headers={}
+    assert(type in (CACHED, DIRECT))
+    connection = httplib.HTTPConnection(*type)
+    connection.request(method, path, body, headers)
     r = connection.getresponse()
     d = r.read()
     return (r,d)
 
 class testWodan(unittest.TestCase):
     def setUp(self):
-        self.cached = httplib.HTTPConnection(*CACHED)
-        self.direct = httplib.HTTPConnection(*DIRECT)
+        self.cached = CACHED
+        self.direct = DIRECT
 
     def test_Connections(self):
-        self.failUnless(self.cached)
-        self.failUnless(self.direct)
-        self.failUnless(self.cached != self.direct)
+        cached = httplib.HTTPConnection(*CACHED)
+        direct = httplib.HTTPConnection(*DIRECT)
+        self.failUnless(cached)
+        self.failUnless(direct)
+        self.failUnless(cached != direct)
 
     def test_HTTP_OK(self):
         (r1,d1) = request(self.cached, 'GET', '/')
@@ -53,6 +58,15 @@ class testWodan(unittest.TestCase):
         self.failUnless(d1 == '404 Not Found:wodan-test cached\n')
         self.failUnless(r2.status == 404 and r2.reason == 'Not Found')
         self.failUnless(d2 == '404 Not Found:wodan-test direct\n')
+
+    def test_HTTP_NOT_MODIFIED(self):
+        (r1,d1) = request(self.direct, 'GET', '/')
+        (r2,d2) = request(self.cached, 'GET', '/')
+        mtime = r1.getheader('Last-Modified').strip()
+        (r1,d1) = request(self.direct, 'GET', '/', headers={'If-Modified-Since': mtime})
+        (r2,d2) = request(self.cached, 'GET', '/', headers={'If-Modified-Since': mtime})
+        self.failUnless(r1.status == 304)
+        self.failUnless(r2.status == 304)
 
 
 if __name__=='__main__':
