@@ -6,14 +6,12 @@
 #ifndef NETWORKCONNECTOR_H
 #define NETWORKCONNECTOR_H
 
-#include "datatypes.h"
+#include "apr_network_io.h"
+#include "httpd.h"
 
-int connection_write_bytes(apr_socket_t *socket, request_rec *r, const char *buffer, int buffersize);
-
-int connection_read_bytes(apr_socket_t *socket, request_rec *r, char *buffer, int buffersize);
-
-int connection_write_string(apr_socket_t *socket, request_rec *r, const char *the_string);
-
-char *connection_read_string(apr_socket_t *socket, request_rec *r);
+int   connection_write_bytes(apr_socket_t *, request_rec *, const char *, int);
+int   connection_read_bytes(apr_socket_t *, request_rec *, char *, int);
+int   connection_write_string(apr_socket_t *, request_rec *, const char *);
+char *connection_read_string(apr_socket_t *, request_rec *);
 
 #endif
