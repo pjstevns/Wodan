@@ -41,7 +41,7 @@ int connection_read_bytes(apr_socket_t *socket, request_rec *r, char *buffer, in
 	if (socket_status != APR_SUCCESS) {
 		if (socket_status == APR_TIMEUP) {
 			ERROR("read from backend timed out");
-			return -1;
+			return -2;
 		}
 		if ((nr_bytes != (apr_size_t) buffersize) && socket_status != APR_EOF) {
 			ERROR("error reading bytes from backend, read %lu bytes, "

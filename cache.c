@@ -1029,7 +1029,7 @@ int receive_body(cache_state_t *cachestate, apr_socket_t *socket, apr_file_t *ca
 	int nr_bytes_read;
 	int writtenbytes;
 	int body_bytes_written;
-	int backend_read_error, client_write_error, cache_write_error;
+	int backend_read_error, backend_time_error, client_write_error, cache_write_error;
 
 	wodan_config_t *config = cachestate->config;
 	request_rec *r = cachestate->r;
@@ -1039,6 +1039,7 @@ int receive_body(cache_state_t *cachestate, apr_socket_t *socket, apr_file_t *ca
 
 	body_bytes_written = 0;
 	backend_read_error = 0;
+	backend_time_error = 0;
 	client_write_error = 0;
 	cache_write_error = 0;
 
@@ -1048,7 +1049,13 @@ int receive_body(cache_state_t *cachestate, apr_socket_t *socket, apr_file_t *ca
 
 		DEBUG("read %d bytes from backend", nr_bytes_read);
 		
-		if (nr_bytes_read == -1) backend_read_error = 1;
+		if (nr_bytes_read == -2) {
+			backend_time_error = 1;
+			break;
+		} else if (nr_bytes_read == -1) {
+			backend_read_error = 1;
+			break;
+		}
 
 		/* write to cache and check for errors */
 		if (cache_file) {
@@ -1105,6 +1112,10 @@ int receive_body(cache_state_t *cachestate, apr_socket_t *socket, apr_file_t *ca
 		return HTTP_BAD_GATEWAY;
 	}
 
+	if (backend_time_error) {
+		ERROR("Timeout reading from backend");
+		return HTTP_GATEWAY_TIME_OUT;
+	}
 	if (backend_read_error) {
 		ERROR("Error reading from backend");
 		return HTTP_BAD_GATEWAY;
@@ -1406,13 +1417,9 @@ static int receive_complete_response(cache_state_t *cachestate, apr_socket_t *so
 
 	httpresponse_t *httpresponse = cachestate->httpresponse;
 
-	if ((status = receive_status_line(cachestate, socket)) == -1) {
-		httpresponse->response = HTTP_BAD_GATEWAY;
-		return HTTP_BAD_GATEWAY;
-	}
+	status = receive_status_line(cachestate, socket);
 	
 	if (ap_is_HTTP_SERVER_ERROR(status)) { /* = 50x */
-		httpresponse->response = HTTP_BAD_GATEWAY;
 		return status;
 	}
 
@@ -1422,7 +1429,6 @@ static int receive_complete_response(cache_state_t *cachestate, apr_socket_t *so
 	}
 	
 	if ((receive_headers_result = receive_headers(cachestate, socket))) {
-		httpresponse->response = HTTP_BAD_GATEWAY;
 		return receive_headers_result;
 	}
 	
