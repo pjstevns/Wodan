@@ -14,6 +14,6 @@ int connection_read_bytes(apr_socket_t *socket, request_rec *r, char *buffer, in
 
 int connection_write_string(apr_socket_t *socket, request_rec *r, const char *the_string);
 
-char *connection_read_string(apr_socket_t *socket, request_rec *r);
+char *connection_read_string(apr_socket_t *socket, request_rec *r, int *status);
 
 #endif

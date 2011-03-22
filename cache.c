@@ -907,13 +907,16 @@ int receive_status_line(cache_state_t *cachestate, apr_socket_t *socket)
 {
 	const char *read_string;
 	const char *http_string, *status_string;
+	int status = 0;
 
 	request_rec *r = cachestate->r;
 	httpresponse_t *httpresponse = cachestate->httpresponse;
 
-	read_string = connection_read_string(socket, r);
-	if (read_string == NULL)
-		return -1;
+	read_string = connection_read_string(socket, r, &status);
+	if (read_string == NULL) {
+		httpresponse->response = status;
+		return status;
+	}
 
 	http_string = ap_getword_white(r->pool, &read_string);
 	status_string = ap_getword_white(r->pool, &read_string);
@@ -962,17 +965,19 @@ int receive_headers(cache_state_t *cachestate, apr_socket_t *socket)
 	// not big enough to store the incoming header, for
 	// example with large Set-Cookie headers
 	char *key, *val;
-	int val_pos, len;
+	int val_pos, len, status = 0;
 	
 	request_rec *r = cachestate->r;
 	httpresponse_t *httpresponse = cachestate->httpresponse;
 
 	header = 0;
-	while((read_header = connection_read_string(socket, r))) {
+	while((read_header = connection_read_string(socket, r, &status))) {
 		/* if read_header is NULL, this signals an error. Escape from here right
 		 * away in that case */
-		if (read_header == NULL)
-			return HTTP_BAD_GATEWAY;
+		if (read_header == NULL) {
+			httpresponse->response = status;
+			return status;
+		}
 
 		if (strcasecmp(read_header, CRLF) == 0)
 			break;

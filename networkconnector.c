@@ -59,7 +59,7 @@ int connection_write_string(apr_socket_t *socket, request_rec *r, const char *th
 	return connection_write_bytes(socket, r, the_string, len);
 }
 
-char *connection_read_string(apr_socket_t *socket, request_rec *r)
+char *connection_read_string(apr_socket_t *socket, request_rec *r, int *status)
 {
 	char *buffer = (char *) apr_pcalloc(r->pool, BUFFERSIZE);
 	apr_size_t index = 0;
@@ -74,7 +74,7 @@ char *connection_read_string(apr_socket_t *socket, request_rec *r)
 			apr_interval_time_t timeout;
 			apr_socket_timeout_get(socket, &timeout);
 			ERROR("read from backend connection timed out, timeout = %ld", timeout);
-				
+			*status = HTTP_GATEWAY_TIME_OUT;
 			return NULL;
 		}
 		if (socket_status == APR_EOF || buffer[index] == '\n')
@@ -84,6 +84,7 @@ char *connection_read_string(apr_socket_t *socket, request_rec *r)
 		
 	 	if (byte_read != 1) {
 	     		ERROR("Error reading string from backend");
+			*status = HTTP_BAD_GATEWAY;
 			return NULL;
 	 	}
      }
