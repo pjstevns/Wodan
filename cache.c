@@ -355,16 +355,11 @@ static const char* wodan_date_canon(apr_pool_t *, const char *);
 static void adjust_dates(T C)
 {
 	const char* datestr = NULL;
-	char *interval = apr_pcalloc(C->r->pool, APR_RFC822_DATE_LEN);
-
 	if ((datestr = apr_table_get(C->R->headers, "Date")))
 		apr_table_set(C->R->headers, "Date", wodan_date_canon(C->r->pool, datestr));
 
 	if ((datestr = get_expire_time(C)))
 		apr_table_set(C->R->headers, "Expires", wodan_date_canon(C->r->pool, datestr));
-
-	apr_rfc822_date(interval, C->mtime);
-	apr_table_set(C->R->headers, "Last-Modified", interval);
 }
 
 void adjust_headers_for_sending(T C)
@@ -500,11 +495,15 @@ int cache_status(T C)
 		}
 	}
 	while (apr_file_gets(buffer, BUFFERSIZE, cachefile) == APR_SUCCESS) {
+		DEBUG("check header: %s", buffer);
 		if (strncasecmp(buffer, "Last-Modified", 13) == 0) {
 			if (strlen(buffer) > 40) {
 				apr_time_t last_modified;
-				if ((last_modified = apr_date_parse_http(buffer+14)))
+				if ((last_modified = apr_date_parse_http(buffer+14))) {
+					DEBUG("found last-modified in cache: %ld",
+							last_modified);
 					C->mtime = last_modified;
+				}
 			}
 			break;
 		}
@@ -533,10 +532,11 @@ int cache_read(T C)
 	if ((ifmodsince = apr_table_get(r->headers_in, "If-Modified-Since"))) {
 		apr_time_t if_modified_since;
 		if ((if_modified_since = apr_date_parse_http(ifmodsince))) {
-			DEBUG("if_modified_since [%ld], mtime [%ld]", if_modified_since, C->mtime);
+			DEBUG("if_modified_since [%ld] - mtime [%ld] = [%ld]", 
+					if_modified_since, C->mtime,
+					if_modified_since - C->mtime);
 			if (C->mtime <= if_modified_since) {
-				C->r->status = HTTP_NOT_MODIFIED;
-				return OK;
+				return C->r->status = HTTP_NOT_MODIFIED;
 			}
 		}
 	}
@@ -1154,7 +1154,7 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 
 	if (backend_read_error) {
 		ERROR("Error reading from backend");
-		return HTTP_BAD_GATEWAY;
+		return C->r->status;
 	}
 	
 	/* everything went well. Close cache file and make sure
@@ -1430,7 +1430,7 @@ static int receive_complete_response(T C, apr_socket_t *socket)
 	apr_file_t *cache_file = NULL;
 
 	if ((status = receive_status_line(C, socket)) == -1)
-		return C->r->status = HTTP_BAD_GATEWAY;
+		return C->r->status;
 	
 	if (ap_is_HTTP_SERVER_ERROR(status)) /* = 50x */
 		return C->r->status = HTTP_BAD_GATEWAY;
