@@ -43,7 +43,7 @@ class testWodan(unittest.TestCase):
         (r2, d2) = request(self.direct, 'GET', '/')
         self.failUnless(r1.status == 200 and r1.reason == 'OK')
         self.failUnless(r2.status == 200 and r2.reason == 'OK')
-        self.failUnless(d1 == '200 OK:wodan-test\n')
+        self.failUnless(d1 == '200 OK:wodan-test\n', d1)
         self.failUnless(d2 == '200 OK:wodan-test\n')
 
     def test_HTTP_NOT_FOUND(self):

@@ -1,6 +1,6 @@
-/** $Id: cache.h 162 2005-02-16 15:36:06Z ilja $
+/*
  * (c) 2000-2006 IC&S, The Netherlands
- * (c) 2008-2011, NFG Net Facilities Group BV, info@nfg.nl
+ * (c) 2008-2012, NFG Net Facilities Group BV, info@nfg.nl
  */
 
 #ifndef CACHE_H

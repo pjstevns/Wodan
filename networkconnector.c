@@ -1,5 +1,6 @@
-/** $Id: networkconnector.c 162 2005-02-16 15:36:06Z ilja $
+/*
  * (c) 2000-2006 IC&S, The Netherlands
+ * (c) 2008-2012 NFG, The Netherlands, paul@nfg.nl
  */
 
 #include "networkconnector.h"
@@ -56,13 +57,6 @@ int connection_read_bytes(apr_socket_t *socket, request_rec *r, char *buffer, in
 	return (int) nr_bytes;
 }
 	  
-int connection_write_string(apr_socket_t *socket, request_rec *r, const char *the_string)
-{
-	int len = (int) strlen(the_string);
-	
-	return connection_write_bytes(socket, r, the_string, len);
-}
-
 char *connection_read_string(apr_socket_t *socket, request_rec *r)
 {
 	char *buffer = (char *) apr_pcalloc(r->pool, BUFFERSIZE);

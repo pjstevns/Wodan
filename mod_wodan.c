@@ -1,6 +1,6 @@
 /* 
  * (c) 2000-2006 IC&S, The Netherlands
- * (c) 2008-2011 NFG, The Netherlands, paul@nfg.nl
+ * (c) 2008-2012 NFG, The Netherlands, paul@nfg.nl
  */ 
 
 #define WODAN_NAME "Wodan"

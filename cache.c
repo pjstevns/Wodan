@@ -1,6 +1,6 @@
 /*
  * (c) 2000-2006 IC&S, The Netherlands
- * (c) 2008-2011, NFG, The Netherlands, paul@nfg.nl
+ * (c) 2008-2012, NFG, The Netherlands, paul@nfg.nl
  */
 
 #include <sys/stat.h>
@@ -28,11 +28,11 @@
 
 #define T CacheState_T
 typedef enum {
-	WODAN_CACHE_PRESENT,        /** present and fresh */
-	WODAN_CACHE_EXPIRED,/** present but expired */
-	WODAN_CACHE_MISSING,     /** not present */
-	WODAN_CACHE_NOCACHE,   /** cannot be cached */
-	WODAN_CACHE_404              /** cached 404 */
+	WODAN_CACHE_PRESENT,       /** present and fresh */
+	WODAN_CACHE_EXPIRED,       /** present but expired */
+	WODAN_CACHE_MISSING,       /** not present */
+	WODAN_CACHE_NOCACHE,       /** cannot be cached */
+	WODAN_CACHE_404            /** cached 404 */
 } WodanCacheStatus_t;
 
 
@@ -84,10 +84,14 @@ static inline int is_cachedir_set(T C)
  */
 static inline int is_response_cacheable (int httpcode, int cache404s)
 {
-	if ( cache404s && (httpcode == 404)) return 1;
-	if ( httpcode == 304 ) return 0;
-	if (ap_is_HTTP_SUCCESS(httpcode)) return 1;
-	if (ap_is_HTTP_REDIRECT(httpcode)) return 1;
+	if (cache404s && (httpcode == 404))
+	       	return 1;
+	if (httpcode == 304)
+	       	return 0;
+	if (ap_is_HTTP_SUCCESS(httpcode))
+	       	return 1;
+	if (ap_is_HTTP_REDIRECT(httpcode))
+	       	return 1;
 	return 0;
 }
 
@@ -121,8 +125,8 @@ static char *get_cache_file_subdir(T C, char *cachefilename, int nr)
 	count = config->cachedir_levels - nr;
 	ptr = buffer + (int) strlen(buffer);
 
-	while ( ( count > 0 ) && ( ptr > buffer ) ) {
-		if ( *ptr == '/' ) {
+	while (( count > 0) && (ptr > buffer)) {
+		if (*ptr == '/') {
 			*ptr = '\0';
 			count--;
 		}
@@ -217,7 +221,6 @@ static int cache_filename(T C, char **filename)
 				} else {
 					DEBUG("No match on [%s: %s]", key, value);
 				}
-					
 			}
                 }
         }
@@ -284,8 +287,10 @@ static void wodan_table_add_when_empty(T C)
 			apr_table_add(base, elts[i].key, elts[i].val);
 }
 
-static const char* wodan_location_reverse_map(wodan_proxy_alias_t* alias, const char *url,
-	request_rec *r)
+static const char* wodan_location_reverse_map(
+		wodan_proxy_alias_t* alias, 
+		const char *url,
+		request_rec *r)
 {
 	int url_len;
 	int alias_len;
@@ -304,7 +309,9 @@ static const char* wodan_location_reverse_map(wodan_proxy_alias_t* alias, const 
 
 }
 
-static wodan_proxy_alias_t* alias_longest_match(wodan_config_t *config, char *uri)
+static wodan_proxy_alias_t* alias_longest_match(
+		wodan_config_t *config, 
+		char *uri)
 {
 	wodan_proxy_alias_t *longest, *list;
 	int length, i;
@@ -656,9 +663,11 @@ int cache_handler(T C)
 	return C->r->status;
 }
 
-static apr_time_t parse_xwodan_expire(request_rec *r,
-				  char *xwodan, int cachetime, 
-				  int *cachetime_interval) 
+static apr_time_t parse_xwodan_expire(
+		request_rec *r,
+		char *xwodan,
+	       	int cachetime, 
+		int *cachetime_interval) 
 {
 	apr_time_t expire_time;
 	char *expires, *c;
@@ -690,8 +699,9 @@ static apr_time_t parse_xwodan_expire(request_rec *r,
 	return expire_time;
 }
 
-static wodan_default_cachetime_t* default_cachetime_longest_match(wodan_config_t *config,
-	char *uri)
+static wodan_default_cachetime_t* default_cachetime_longest_match(
+		wodan_config_t *config,
+		char *uri)
 {
 	wodan_default_cachetime_t *longest, *list;
 	int length, i;
@@ -710,7 +720,9 @@ static wodan_default_cachetime_t* default_cachetime_longest_match(wodan_config_t
 	return longest;
 }
 
-static wodan_default_cachetime_header_t* default_cachetime_header_match(wodan_config_t *config, apr_table_t *headers)
+static wodan_default_cachetime_header_t* default_cachetime_header_match(
+		wodan_config_t *config, 
+		apr_table_t *headers)
 {
 	wodan_default_cachetime_header_t *list;
 	const char *header;
@@ -729,7 +741,9 @@ static wodan_default_cachetime_header_t* default_cachetime_header_match(wodan_co
 	return NULL;
 }
 
-static wodan_default_cachetime_regex_t* default_cachetime_regex_match(wodan_config_t *config, char *uri)
+static wodan_default_cachetime_regex_t* default_cachetime_regex_match(
+		wodan_config_t *config, 
+		char *uri)
 {
 	wodan_default_cachetime_regex_t *list;
 	int i;
@@ -948,7 +962,6 @@ void cache_close_cachefile(T C, apr_file_t *temp_cachefile)
 
 int cache_update_ttl(T C)
 {
-
 	request_rec *r = C->r;
 	char *cachefilename;
 	int expire_interval;
@@ -1091,8 +1104,7 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 	client_write_error = 0;
 	cache_write_error = 0;
 
-	while(1)
-	{
+	while(1) {
 		nr_bytes_read = connection_read_bytes(socket, C->r, buffer, BUFFERSIZE);
 
 		DEBUG("read %d bytes from backend", nr_bytes_read);
@@ -1233,10 +1245,15 @@ void ap_reverseproxy_clear_connection(apr_pool_t *p, apr_table_t *headers)
  *             the backend.
  */
 
-static apr_status_t get_destination_parts(apr_pool_t *p,
-			  const char *proxy_url, const char *uri,
-			  char **dest_host, int *dest_port, char **dest_path,
-			  char **dest_host_and_port, int *do_ssl) 
+static apr_status_t get_destination_parts(
+		apr_pool_t *p,
+		const char *proxy_url,
+	       	const char *uri,
+		char **dest_host,
+	       	int *dest_port,
+	       	char **dest_path,
+		char **dest_host_and_port,
+	       	int *do_ssl) 
 {
 	apr_uri_t uptr;
 	char *tmp_path;

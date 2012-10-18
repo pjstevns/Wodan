@@ -1,5 +1,6 @@
-/**
+/*
  * (c) 2000-2006 IC&S, The Netherlands
+ * (c) 2008-2012 NFG, The Netherlands, paul@nfg.nl
  */
 
 #ifndef _UTIL_H_

@@ -1,9 +1,6 @@
-/**
+/*
  * (c) 2000-2006 IC&S, The Netherlands
- * (c) 2008-2011 NFG, The Netherlands
- * @file util.c
- *
- * Implements different utility functions that are used by Wodan
+ * (c) 2008-2012 NFG, The Netherlands, paul@nfg.nl
  */
  
 #include "datatypes.h"

@@ -49,7 +49,7 @@ less work to do.
 - To hide the web servers from the internet.
 - Provide a readonly emergency cache in case of catastrophic failure of all
   backend webservers. Being able to run in disconnected mode is one of the main
-advantages compared to more advanced caching solutions like varnish.
+  advantages compared to more advanced caching solutions like varnish.
 
 ---------------------------------------------------------------
 3. When NOT to use Wodan, or when to think twice about using it
@@ -57,12 +57,12 @@ advantages compared to more advanced caching solutions like varnish.
 
 - The web site has a user login/authentication system. Or rather, do not use it
   if the biggest part of your site is hidden behind a login system. If you have
-a much visited set of pages and a part behind a login system, you can still use
-mod_wodan to cache the public part. 
+  a much visited set of pages and a part behind a login system, you can still use
+  mod_wodan to cache the public part. 
 
 - The web site site has very dynamic content. In this case, mod_wodan will not
   gain you much in terms of server load. You can still cache things like
-graphics and css files though, so there still might be some gain.
+  graphics and css files though, so there still might be some gain.
 
 --------------------------------------
 4. Advantages over other proxy systems
@@ -77,9 +77,9 @@ Here is an overview of a few important advantages:
 - Use of other apache modules like usertracking, or mod_balance.
 - Often used open source reverse proxies like Squid are sometimes too nice for
   clients.  Whenever a client really wants the page from the webserver, Squid
-passes the request to the backend. Wodan, however, will always serve from it's
-cache, unless the configuration tells it not to.  Varnish is a major and
-powerfull improvement in this respect, but requires careful tuning.
+  passes the request to the backend. Wodan, however, will always serve from it's
+  cache, unless the configuration tells it not to.  Varnish is a major and
+  powerfull improvement in this respect, but requires careful tuning.
   
 --------------- 5. Installation ---------------
 
@@ -278,6 +278,21 @@ the BackendTimeout will be set to 60000 milliseconds.
 
 The default value for WodanBackendTimeout is 0, which means that the timeout
 will not be used (only the normal apache and TCP timeouts will be used.
+
+
+	-------------------------------------------------
+	WodanAuthHeaderMatch <http-header> <regexpattern>
+	-------------------------------------------------
+
+TODO:
+
+If set, when the specified header matches the pattern, authenticated users will
+always get the non-cached version. Only if the backend is unreachable will the 
+cached version be returned
+
+Use this if you want to provide non-cached pages to authenticated users, but 
+provide them with a fall-back anonymous version of the page when the backend is
+down.
 
 ----------
 7. Running
