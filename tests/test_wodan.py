@@ -4,7 +4,7 @@ import httplib
 import unittest
 
 CACHED = ('wodan', 80)
-DIRECT = ('wodan', 8080)
+DIRECT = ('wodan', 8880)
 
 """
 setup:
