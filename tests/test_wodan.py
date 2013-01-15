@@ -2,9 +2,19 @@
 
 import httplib
 import unittest
+import BaseHTTPServer
+import time
+import thread
+import random
+import socket
 
 CACHED = ('wodan', 80)
 DIRECT = ('wodan', 8880)
+
+SLOW_SERVER = ('wodan', 8123)
+SLOW_SERVER_DELAY = 3
+
+SLOW_FRONT = ('wodan', 8888)
 
 """
 setup:
@@ -15,10 +25,33 @@ setup:
 """
 
 
+class requestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    def log_request(self, *args):
+        pass
+
+    def do_GET(self, *args):
+        time.sleep(SLOW_SERVER_DELAY)
+        self.send_response(200, 'OK')
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write('wodan -- slow response\n\n')
+        self.wfile.flush()
+        return
+
+
+def runSlowServer():
+
+    def start_server(*args):
+        httpd = BaseHTTPServer.HTTPServer(SLOW_SERVER, requestHandler)
+        httpd.serve_forever()
+
+    thread.start_new_thread(start_server, ())
+
+
 def request(type, method, path, body=None, headers=None):
     if not headers:
         headers = {}
-    assert(type in (CACHED, DIRECT))
+    assert(type in (CACHED, DIRECT, SLOW_FRONT))
     connection = httplib.HTTPConnection(*type)
     connection.request(method, path, body, headers)
     r = connection.getresponse()
@@ -30,6 +63,7 @@ class testWodan(unittest.TestCase):
     def setUp(self):
         self.cached = CACHED
         self.direct = DIRECT
+        self.slow = SLOW_FRONT
 
     def test_Connections(self):
         cached = httplib.HTTPConnection(*CACHED)
@@ -75,6 +109,16 @@ class testWodan(unittest.TestCase):
         self.failUnless(r1.status == 304)
         self.failUnless(r2.status == 304, "expect [304] got [%d]" % r2.status)
 
+    def test_timeout(self):
+        url = '/slow/%s/index.html' % random.random()
+        (r1, d1) = request(self.cached, 'GET', url)
+        self.failUnless(r1.status == 504)
+        (r2, d2) = request(self.slow, 'GET', url)
+        self.failUnless(r2.status == 200)
+        (r3, d3) = request(self.cached, 'GET', url)
+        self.failUnless(r3.status == 200)
 
 if __name__ == '__main__':
+    runSlowServer()
+    raw_input("Hit ENTER to continue")
     unittest.main()
