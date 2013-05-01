@@ -631,7 +631,7 @@ int cache_read(T C)
 		user_agent = apr_table_get(r->headers_in, "User-Agent");
 		if (user_agent == NULL) 
 			user_agent = "unknown";
-		ERROR("error writing to socket. "
+		DEBUG("error writing to socket. "
 				"Bytes written/Body length = %d/%d, "
 				"User-Agent: %s", body_bytes_written, content_length, user_agent);
 		return HTTP_INTERNAL_SERVER_ERROR;
@@ -660,7 +660,7 @@ int cache_handler(T C)
 			break;
 	}
 
-	return C->r->status;
+	return OK;
 }
 
 static apr_time_t parse_xwodan_expire(
@@ -991,7 +991,7 @@ int cache_update_ttl(T C)
 	apr_file_write_full(cachefile, expire_time_string, strlen(expire_time_string),
 			&bytes_written);
 	if (bytes_written != strlen(expire_time_string)) {
-		ERROR("error writing to cachefile");
+		DEBUG("error writing to cachefile");
 		apr_file_close(cachefile);
 		return -1;
 	}
@@ -1152,7 +1152,7 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 		content_length_str = apr_table_get(C->R->headers, "Content-Length");
 		content_length = (content_length_str) ?  atoi(content_length_str): 0;
 					
-		ERROR("Error writing to client. " 
+		DEBUG("Error writing to client. " 
 				"Bytes written/total bytes = %d/%d, " 
 				"User-Agent: %s", body_bytes_written, content_length, user_agent);
 		return HTTP_BAD_GATEWAY;
@@ -1536,7 +1536,7 @@ static wodan_proxy_destination_t* destination_longest_match(T C)
 	return longest;	
 }
 
-int cache_update_fetch(T C)
+static int cache_update_fetch(T C)
 {
 	request_rec *r = C->r;
 
@@ -1568,7 +1568,7 @@ int cache_update_fetch(T C)
 	//Connect to proxyhost
 	socket = connection_open(C, desthost, destport, do_ssl);
 	if(socket == NULL)
-		return C->r->status = HTTP_BAD_GATEWAY;
+		return DECLINED;
 
 	//Copy headers and make adjustments
 	out_headers = apr_table_copy(C->r->pool, C->r->headers_in);
@@ -1577,7 +1577,7 @@ int cache_update_fetch(T C)
 	/* send request */
 	if (send_complete_request(C, socket, dest_host_and_port, destpath, out_headers) == -1) {
 		apr_socket_close(socket);
-		return C->r->status = HTTP_BAD_GATEWAY;
+		return DECLINED;
 	}	
 	
 	result = receive_complete_response(C, socket);
