@@ -6,7 +6,6 @@ import BaseHTTPServer
 import time
 import thread
 import random
-import socket
 
 CACHED = ('wodan', 80)
 DIRECT = ('wodan', 8880)
@@ -51,7 +50,7 @@ def runSlowServer():
 def request(type, method, path, body=None, headers=None):
     if not headers:
         headers = {}
-    assert(type in (CACHED, DIRECT, SLOW_FRONT))
+    assert(type in (CACHED, DIRECT, SLOW_FRONT, SLOW_SERVER))
     connection = httplib.HTTPConnection(*type)
     connection.request(method, path, body, headers)
     r = connection.getresponse()
@@ -63,7 +62,8 @@ class testWodan(unittest.TestCase):
     def setUp(self):
         self.cached = CACHED
         self.direct = DIRECT
-        self.slow = SLOW_FRONT
+        self.slow_back = SLOW_SERVER
+        self.slow_front = SLOW_FRONT
 
     def test_Connections(self):
         cached = httplib.HTTPConnection(*CACHED)
@@ -113,10 +113,12 @@ class testWodan(unittest.TestCase):
         url = '/slow/%s/index.html' % random.random()
         (r1, d1) = request(self.cached, 'GET', url)
         self.failUnless(r1.status == 504)
-        (r2, d2) = request(self.slow, 'GET', url)
-        self.failUnless(r2.status == 200)
-        (r3, d3) = request(self.cached, 'GET', url)
-        self.failUnless(r3.status == 200)
+        (r2, d2) = request(self.slow_back, 'GET', url)
+        self.failUnless(r2.status == 200, r2.status)
+        (r3, d3) = request(self.slow_front, 'GET', url)
+        self.failUnless(r3.status == 200, r3.status)
+        (r4, d4) = request(self.cached, 'GET', url)
+        self.failUnless(r4.status == 200)
 
 if __name__ == '__main__':
     runSlowServer()
