@@ -113,12 +113,18 @@ class testWodan(unittest.TestCase):
         url = '/slow/%s/index.html' % random.random()
         (r1, d1) = request(self.cached, 'GET', url)
         self.failUnless(r1.status == 504)
+
         (r2, d2) = request(self.slow_back, 'GET', url)
         self.failUnless(r2.status == 200, r2.status)
+        self.failUnless(d2 == 'wodan -- slow response\n\n', '[%s]' % d2)
+
         (r3, d3) = request(self.slow_front, 'GET', url)
         self.failUnless(r3.status == 200, r3.status)
+        self.failUnless(d3 == 'wodan -- slow response\n\n')
+
         (r4, d4) = request(self.cached, 'GET', url)
         self.failUnless(r4.status == 200)
+        self.failUnless(d4 == 'wodan -- slow response\n\n')
 
 if __name__ == '__main__':
     runSlowServer()
