@@ -16,6 +16,7 @@
 #include "datatypes.h"
 #include "util.h"
 
+#include "http_request.h"
 #include "http_config.h"
 #include "http_log.h"
 #include "apr_strings.h"
