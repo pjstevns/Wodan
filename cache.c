@@ -14,6 +14,7 @@
 #include "networkconnector.h"
 
 #include "httpd.h"
+#include "http_request.h"
 #include "http_log.h"
 #include "http_core.h"
 #include "apr.h"
@@ -371,6 +372,8 @@ static void adjust_dates(T C)
 
 void adjust_headers_for_sending(T C)
 {
+	request_rec *r, *prev;
+        r = C->r;
 	adjust_dates(C);
 	/* do more adjustments to the headers. This used to be in 
 	   mod_reverseproxy.c */
@@ -381,6 +384,16 @@ void adjust_headers_for_sending(T C)
 	
 	C->r->headers_out = C->R->headers;
 	C->r->content_type = apr_table_get(C->R->headers, "Content-Type");
+	if (! ap_is_initial_req(r)) {
+		prev = r->prev;
+		while (prev) {
+			DEBUG("update status: %d -> %d", r->status, prev->status);
+			r->status = prev->status;
+			if (! prev->prev)
+				break;
+			prev = prev->prev;
+		}
+	}
 }
 
 T cache_new(request_rec *r, module *wodan_module)
@@ -1505,9 +1518,13 @@ static apr_socket_t* connection_open (T C, char* host, int port, int do_ssl UNUS
 		DEBUG("socket timeout set to %ld", C->config->backend_timeout);
 	}
 	if ((result = apr_socket_connect(socket, server_address)) != APR_SUCCESS) {
+		C->r->status = HTTP_SERVICE_UNAVAILABLE;
 		char err_buf[255];
 		memset(&err_buf,0,sizeof(err_buf));
-		ERROR("Socket error at %s:%d - [%s]", host, port, apr_strerror(result, err_buf, sizeof(err_buf)));
+		ERROR("Socket error at %s:%d - [%d:%s]", 
+				host, port, 
+				C->r->status,
+				apr_strerror(result, err_buf, sizeof(err_buf)));
 		return NULL;
 	}
 	DEBUG("Succesfully connected to %s:%d", host, port);
@@ -1589,6 +1606,7 @@ static int cache_update_fetch(T C)
 	
 int cache_update (T C) 
 {
+
 	if ((cache_update_fetch(C) == DECLINED))
 		return DECLINED;
 
