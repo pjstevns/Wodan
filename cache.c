@@ -1585,7 +1585,7 @@ static int cache_update_fetch(T C)
 	//Connect to proxyhost
 	socket = connection_open(C, desthost, destport, do_ssl);
 	if(socket == NULL)
-		return C->r->status;
+		return DECLINED;
 
 	//Copy headers and make adjustments
 	out_headers = apr_table_copy(C->r->pool, C->r->headers_in);
