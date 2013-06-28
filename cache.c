@@ -1615,30 +1615,30 @@ static int cache_update_fetch(T C)
 	
 int cache_update (T C) 
 {
-	if (cache_update_fetch(C) == DECLINED)
-		return DECLINED;
+	int result = cache_update_fetch(C);
 
 	/* If 404 are to be cached, then already return
 	 * default 404 page here in case of a 404. */
 	if ((C->config->cache_404s) && (C->r->status == HTTP_NOT_FOUND))
-		return C->r->status;
+		result = OK;
 
 	/* if nothing can be received from backend, and there's
 	   nothing in cache, return the response code so
 	   ErrorDocument can handle it ... */
-	if (C->status != WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->r->status) || (C->r->status == HTTP_NOT_FOUND))) {
+	else if (C->status != WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->r->status) || (C->r->status == HTTP_NOT_FOUND))) {
 		if (C->config->run_on_cache)
 			C->r->status = HTTP_NOT_FOUND;
-		return C->r->status;
+		result = OK;
 	}
 
-	if (C->status == WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->r->status) || (C->r->status == HTTP_NOT_MODIFIED))) {
+	else if (C->status == WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->r->status) || (C->r->status == HTTP_NOT_MODIFIED))) {
 		cache_update_ttl(C);
 		cache_read(C);
-		return C->r->status = HTTP_OK;
+		C->r->status = HTTP_OK;
+		result = OK;
 	}
 
-	return C->r->status;
+	return result;
 }
 
 //EOF
