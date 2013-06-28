@@ -888,7 +888,7 @@ static void create_cache_dir(T C, char *cachefilename)
 static int write_preamble(T C, apr_file_t *cachefile, char *expire_time_string)
 {
 	int expire_interval = C->interval;
-	apr_file_printf(cachefile, "%s%s%s", C->r->hostname, C->r->unparsed_uri, CRLF);
+	apr_file_printf(cachefile, "%s%s%s", C->r->hostname?C->r->hostname:"", C->r->unparsed_uri, CRLF);
 	apr_file_printf(cachefile, "%d%s", expire_interval, CRLF);
 	apr_file_printf(cachefile, "%s%s", expire_time_string, CRLF);
 	apr_file_printf(cachefile, "%d%s", C->r->status, CRLF);
