@@ -475,6 +475,7 @@ int cache_status(T C)
 
 	if(ttl == 0) {
 		apr_file_close(cachefile);
+		C->mtime = APR_DATE_BAD;
 		return C->status = WODAN_CACHE_EXPIRED;
 	}
 
