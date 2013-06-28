@@ -1593,8 +1593,10 @@ static int cache_update_fetch(T C)
 	
 	//Connect to proxyhost
 	socket = connection_open(C, desthost, destport, do_ssl);
-	if(socket == NULL)
+	if(socket == NULL) {
+		C->r->status = HTTP_SERVICE_UNAVAILABLE;
 		return DECLINED;
+	}
 
 	//Copy headers and make adjustments
 	out_headers = apr_table_copy(C->r->pool, C->r->headers_in);
@@ -1603,6 +1605,7 @@ static int cache_update_fetch(T C)
 	/* send request */
 	if (send_complete_request(C, socket, dest_host_and_port, destpath, out_headers) == -1) {
 		apr_socket_close(socket);
+		C->r->status = HTTP_SERVICE_UNAVAILABLE;
 		return DECLINED;
 	}	
 	
