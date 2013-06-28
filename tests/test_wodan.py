@@ -89,13 +89,14 @@ class testWodan(unittest.TestCase):
         self.failUnless(d2 == '404 Not Found:wodan-test direct\n')
 
     def test_HTTP_SERVICE_UNAVAILABLE_cached(self):
-        (r1, d1) = request(self.cached, 'GET', '/fail/index.html')
-        self.failUnless(r1.status == 503)
-        self.failUnless(r1.reason == 'Service Temporarily Unavailable')
+        (r1, d1) = request(self.cached, 'GET', '/fail/%s/index.html' %
+                           random.random())
+        self.failUnless(r1.status == 404 and r1.reason == 'Not Found')
         self.failUnless(d1 == '404 Not Found:wodan-test cached\n', d1)
 
     def test_HTTP_SERVICE_UNAVAILABLE_direct(self):
-        (r2, d2) = request(self.direct, 'GET', '/fail/index.html')
+        (r2, d2) = request(self.direct, 'GET', '/fail/%s/index.html' %
+                          random.random())
         self.failUnless(r2.status == 404 and r2.reason == 'Not Found')
         self.failUnless(d2 == '404 Not Found:wodan-test direct\n', d2)
 

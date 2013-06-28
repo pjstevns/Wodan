@@ -399,6 +399,9 @@ void adjust_headers_for_sending(T C)
 T cache_new(request_rec *r, module *wodan_module)
 {
 	T C;
+	DEBUG("Processing new request: %s%s, initial: %d", 
+			r->hostname?r->hostname:"", r->unparsed_uri,
+			ap_is_initial_req(r));
 	C = apr_pcalloc(r->pool, sizeof(*C));
 	C->config = (wodan_config_t *)ap_get_module_config(r->server->module_config, wodan_module);
 	C->R = apr_pcalloc(r->pool, sizeof(Response_T));
@@ -659,6 +662,8 @@ int cache_read(T C)
 
 int cache_handler(T C)
 {
+	int result = OK;
+	request_rec *r = C->r;
 	// see if the request can be handled from the cache.
 	WodanCacheStatus_t status = cache_status(C);
 
@@ -673,11 +678,12 @@ int cache_handler(T C)
 		case WODAN_CACHE_NOCACHE:
 			//Get the httpresponse from remote server	
 			if ((cache_update(C) == DECLINED))
-				return DECLINED;
+				result = DECLINED;
 			break;
 	}
 
-	return OK;
+	DEBUG("cache_handler done: C->status=%d r->status %d", C->status, r->status);
+	return result;
 }
 
 static apr_time_t parse_xwodan_expire(
@@ -1522,7 +1528,6 @@ static apr_socket_t* connection_open (T C, char* host, int port, int do_ssl UNUS
 		DEBUG("socket timeout set to %ld", C->config->backend_timeout);
 	}
 	if ((result = apr_socket_connect(socket, server_address)) != APR_SUCCESS) {
-		C->r->status = HTTP_SERVICE_UNAVAILABLE;
 		char err_buf[255];
 		memset(&err_buf,0,sizeof(err_buf));
 		ERROR("Socket error at %s:%d - [%d:%s]", 
@@ -1589,7 +1594,7 @@ static int cache_update_fetch(T C)
 	//Connect to proxyhost
 	socket = connection_open(C, desthost, destport, do_ssl);
 	if(socket == NULL)
-		return OK;
+		return DECLINED;
 
 	//Copy headers and make adjustments
 	out_headers = apr_table_copy(C->r->pool, C->r->headers_in);
@@ -1598,7 +1603,7 @@ static int cache_update_fetch(T C)
 	/* send request */
 	if (send_complete_request(C, socket, dest_host_and_port, destpath, out_headers) == -1) {
 		apr_socket_close(socket);
-		return OK;
+		return DECLINED;
 	}	
 	
 	result = receive_complete_response(C, socket);
@@ -1610,8 +1615,7 @@ static int cache_update_fetch(T C)
 	
 int cache_update (T C) 
 {
-
-	if ((cache_update_fetch(C) == DECLINED))
+	if (cache_update_fetch(C) == DECLINED)
 		return DECLINED;
 
 	/* If 404 are to be cached, then already return
