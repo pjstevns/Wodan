@@ -304,12 +304,15 @@ static int wodan_init_handler(apr_pool_t *p, apr_pool_t *plog UNUSED, apr_pool_t
 
 static int wodan_handler(request_rec *r)
 {
+	int result;
 	DEBUG("Processing new request: %s%s, initial: %d", 
 			r->hostname?r->hostname:"", r->unparsed_uri,
 			ap_is_initial_req(r));
 
 	CacheState_T C = cache_new(r, &wodan_module);
-	return cache_handler(C);
+	result = cache_handler(C);
+	DEBUG("[%d] done. status %d", result, r->status);
+	return result;
 }
 
 static void wodan_register_hooks(apr_pool_t *p UNUSED)

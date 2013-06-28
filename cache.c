@@ -484,16 +484,19 @@ int cache_status(T C)
 	if (ttl < (C->interval/10)) {
 		if (rand <= 0.001) {
 			apr_file_close(cachefile);
+			C->mtime = APR_DATE_BAD;
 			return C->status = WODAN_CACHE_EXPIRED;
 		}
 	} else if (ttl < (C->interval/5)) {
 		if (rand <= 0.0001) {
 			apr_file_close(cachefile);
+			C->mtime = APR_DATE_BAD;
 			return C->status = WODAN_CACHE_EXPIRED;
 		}
 	} else if (ttl < (C->interval/4)) {
 		if (rand <= 0.00005) {
 			apr_file_close(cachefile);
+			C->mtime = APR_DATE_BAD;
 			return C->status = WODAN_CACHE_EXPIRED;
 		}
 	}
