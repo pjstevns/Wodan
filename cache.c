@@ -1631,14 +1631,14 @@ int cache_update (T C)
 	else if (C->status != WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->r->status) || (C->r->status == HTTP_NOT_FOUND))) {
 		if (C->config->run_on_cache)
 			C->r->status = HTTP_NOT_FOUND;
-		result = OK;
+		result = DECLINED;
 	}
 
 	else if (C->status == WODAN_CACHE_EXPIRED && (ap_is_HTTP_SERVER_ERROR(C->r->status) || (C->r->status == HTTP_NOT_MODIFIED))) {
 		cache_update_ttl(C);
 		cache_read(C);
 		C->r->status = HTTP_OK;
-		result = OK;
+		result = DECLINED;
 	}
 
 	return result;
