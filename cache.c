@@ -61,6 +61,7 @@ struct T {
 	wodan_config_t *config;
 	request_rec *r;
 	Response_T *R;
+	apr_bucket_brigade *bb;
 };
 
 
@@ -407,6 +408,7 @@ T cache_new(request_rec *r, module *wodan_module)
 	C->R = apr_pcalloc(r->pool, sizeof(Response_T));
 	C->R->headers = apr_table_make(r->pool, 0);
 	C->r = r;
+	C->bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
 	return C;
 }
 
@@ -545,11 +547,11 @@ int cache_status(T C)
 
 int cache_read(T C)
 {
+	apr_status_t rv;
 	apr_file_t *cachefile;
 	char buffer[BUFFERSIZE];
 	int write_error;
 	int content_length = 0;
-	int body_bytes_written = 0;
 	
 	request_rec *r = C->r;
 	char **cachefilename = &(C->cachefilename);
@@ -630,19 +632,15 @@ int cache_read(T C)
 	write_error = 0;
 	while(!apr_file_eof(cachefile) && !write_error) {
 		apr_size_t bytes_read;
-		int bytes_written;
-
 		apr_file_read_full(cachefile, buffer, BUFFERSIZE, &bytes_read);
 
-		bytes_written = ap_rwrite(buffer, bytes_read, r);
-		body_bytes_written += bytes_written;
-		if (((int) bytes_read != bytes_written) || bytes_written == -1)
+		if ((rv = apr_brigade_write(C->bb, NULL, NULL, buffer, bytes_read)) != APR_SUCCESS) {
+			DEBUG("apr_brigade_write failed");
 			write_error = 1;
+		}
 		if (bytes_read < BUFFERSIZE)
 			break;
 	}
-
-	ap_rflush(r);
 
 	/* TODO add error checking for file reading */
 	if (write_error) {
@@ -652,12 +650,20 @@ int cache_read(T C)
 		if (user_agent == NULL) 
 			user_agent = "unknown";
 		DEBUG("error writing to socket. "
-				"Bytes written/Body length = %d/%d, "
-				"User-Agent: %s", body_bytes_written, content_length, user_agent);
+				"Body length = %d, "
+				"User-Agent: %s", content_length, user_agent);
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	return 1;
+}
+
+static void cache_flush(T C)
+{
+	apr_bucket *b;
+	b = apr_bucket_flush_create(C->r->connection->bucket_alloc);
+	APR_BRIGADE_INSERT_TAIL(C->bb, b);
+	ap_pass_brigade(C->r->connection->output_filters, C->bb);
 }
 
 int cache_handler(T C)
@@ -682,7 +688,9 @@ int cache_handler(T C)
 			break;
 	}
 
-	DEBUG("cache_handler done: C->status=%d r->status %d", C->status, r->status);
+	cache_flush(C);
+
+	DEBUG("cache_handler done: %d C->status=%d r->status %d", status, C->status, r->status);
 	return result;
 }
 
@@ -968,8 +976,10 @@ apr_file_t *cache_get_cachefile(T C)
 
 void cache_close_cachefile(T C, apr_file_t *temp_cachefile)
 {
+	request_rec *r;
 	const char * src;
 	char *dst;
+	r = C->r;
 
 	// copy the temporary file into the real cache file 
 	if (! temp_cachefile) return;
@@ -979,6 +989,7 @@ void cache_close_cachefile(T C, apr_file_t *temp_cachefile)
 	create_cache_dir(C, dst);
 
 	apr_file_name_get(&src, temp_cachefile);
+	DEBUG("copy cache: %s -> %s", src, dst);
 	apr_file_copy(src, dst, APR_UREAD|APR_UWRITE|APR_GREAD, C->r->pool);
 	apr_file_close(temp_cachefile);
 }		
@@ -1114,15 +1125,13 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 {
 	char *buffer;
 	int nr_bytes_read;
-	int writtenbytes;
-	int body_bytes_written;
 	int backend_read_error, client_write_error, cache_write_error;
+	apr_status_t rv;
 
 	request_rec *r = C->r;
 
 	buffer = apr_pcalloc(r->pool, BUFFERSIZE);
 
-	body_bytes_written = 0;
 	backend_read_error = 0;
 	client_write_error = 0;
 	cache_write_error = 0;
@@ -1130,14 +1139,20 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 	while(1) {
 		nr_bytes_read = connection_read_bytes(socket, C->r, buffer, BUFFERSIZE);
 
+		if (nr_bytes_read == 0)
+			break;
+
 		DEBUG("read %d bytes from backend", nr_bytes_read);
 		
 		if (nr_bytes_read == -1) backend_read_error = 1;
 
 		/* write to cache and check for errors */
 		if (cache_file) {
+			const char *filename;
 			apr_size_t cache_bytes_written;
 			apr_file_write_full(cache_file, buffer, nr_bytes_read, &cache_bytes_written);
+			apr_file_name_get(&filename, cache_file);
+			DEBUG("write %ld bytes to cache_file %s", cache_bytes_written, filename);
 
 			if ((int) cache_bytes_written < nr_bytes_read) {
 				cache_write_error = 1;
@@ -1146,19 +1161,13 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 		}
 					
 		if (!C->r->header_only) {
-			writtenbytes = ap_rwrite(buffer, nr_bytes_read, C->r);
-			body_bytes_written += writtenbytes;
-			/* escape from loop if there's an error */
-			if (writtenbytes < 0 || 
-			    writtenbytes != nr_bytes_read) {
-			    client_write_error = 1;
+			if ((rv = apr_brigade_write(C->bb, NULL, NULL, buffer, nr_bytes_read)) != APR_SUCCESS) {
+				DEBUG("apr_brigade_write failed");
+				client_write_error=rv;
 				break;
 			}
 		}
 			
-		/* last escape hatch */
-		if (nr_bytes_read == 0)
-			break;
 	}
 	
 	/* handle the possible errors */
@@ -1166,24 +1175,18 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 		/* add a more explicit error message to the error_log
 		 * including User-Agent and Content-Length */
 		const char *user_agent;
-		const char *content_length_str;
-		int content_length;
 		
 		user_agent = apr_table_get(C->r->headers_in, "User-Agent");
 		if (user_agent == NULL)
 			user_agent = "unknown";
-		content_length_str = apr_table_get(C->R->headers, "Content-Length");
-		content_length = (content_length_str) ?  atoi(content_length_str): 0;
 					
 		DEBUG("Error writing to client. " 
-				"Bytes written/total bytes = %d/%d, " 
-				"User-Agent: %s", body_bytes_written, content_length, user_agent);
+				"User-Agent: %s", user_agent);
 		return HTTP_BAD_GATEWAY;
 	}
 
 	if (cache_write_error) {
 		ERROR("Error writing to cache file");
-		ap_rflush(C->r);
 		return HTTP_BAD_GATEWAY;
 	}
 
@@ -1195,7 +1198,6 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 	/* everything went well. Close cache file and make sure
 	 * all content goes to the client */
 	cache_close_cachefile(C, cache_file);
-	ap_rflush(C->r);
 
 	return OK;
 }
