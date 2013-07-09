@@ -114,13 +114,6 @@ static int cache_is_cacheable(T C)
 		return 0;
 	}
 	
-	if (!is_response_cacheable(C->r->status, C->config->cache_404s)) {
-		DEBUG("Response isn't cacheable: %d", C->r->status);
-		return 0;
-	}
-	if ((char *) ap_strcasestr(C->r->unparsed_uri, "cache=no") != NULL)
-		return 0;
-
 	return 1;
 }
 
@@ -972,6 +965,13 @@ apr_file_t *cache_get_cachefile(T C)
 	request_rec *r = C->r;
 
 	if (! cache_is_cacheable(C))
+		return NULL;
+
+	if (!is_response_cacheable(C->r->status, C->config->cache_404s)) {
+		DEBUG("Response isn't cacheable: %d", C->r->status);
+		return NULL;
+	}
+	if ((char *) ap_strcasestr(C->r->unparsed_uri, "cache=no") != NULL)
 		return NULL;
 
 	if ((expire = get_expire_time(C)) == NULL)
