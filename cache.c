@@ -543,6 +543,20 @@ int cache_status(T C)
 	return C->status = WODAN_CACHE_PRESENT;
 }
 
+static void cache_flush(T C)
+{
+	ap_rflush(C->r);
+}
+
+static int wodan_rwrite(const void *buf, int nbyte, request_rec *r)
+{
+	if (r->connection->aborted) {
+		DEBUG("client connection aborted!");
+		return -1;
+	}
+	return ap_rwrite(buf, nbyte, r);
+}
+
 int cache_read(T C)
 {
 	apr_file_t *cachefile;
@@ -634,15 +648,18 @@ int cache_read(T C)
 
 		apr_file_read_full(cachefile, buffer, BUFFERSIZE, &bytes_read);
 
-		bytes_written = ap_rwrite(buffer, bytes_read, r);
-		body_bytes_written += bytes_written;
-		if (((int) bytes_read != bytes_written) || bytes_written == -1)
+		bytes_written = wodan_rwrite(buffer, bytes_read, r);
+		if (((int) bytes_read != bytes_written) || bytes_written == -1) {
 			write_error = 1;
+		} else {
+			body_bytes_written += bytes_written;
+		}
 		if (bytes_read < BUFFERSIZE)
 			break;
 	}
 
-	ap_rflush(r);
+	cache_flush(C);
+
 
 	/* TODO add error checking for file reading */
 	if (write_error) {
@@ -1027,8 +1044,9 @@ int receive_status_line(T C, apr_socket_t *socket)
 {
 	const char *s;
 
-	if (! (s = connection_read_string(socket, C->r)))
+	if (! (s = connection_read_string(socket, C->r))) {
 		return -1;
+	}
 
 	ap_getword_white(C->r->pool, &s);
 	return C->r->status = atoi(ap_getword_white(C->r->pool, &s));
@@ -1130,9 +1148,16 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 	while(1) {
 		nr_bytes_read = connection_read_bytes(socket, C->r, buffer, BUFFERSIZE);
 
+		if (nr_bytes_read == -1) {
+			backend_read_error = 1;
+			break;
+		}
+
+		if (nr_bytes_read == 0)
+			break;
+
 		DEBUG("read %d bytes from backend", nr_bytes_read);
 		
-		if (nr_bytes_read == -1) backend_read_error = 1;
 
 		/* write to cache and check for errors */
 		if (cache_file) {
@@ -1146,21 +1171,19 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 		}
 					
 		if (!C->r->header_only) {
-			writtenbytes = ap_rwrite(buffer, nr_bytes_read, C->r);
-			body_bytes_written += writtenbytes;
+			writtenbytes = wodan_rwrite(buffer, nr_bytes_read, C->r);
 			/* escape from loop if there's an error */
-			if (writtenbytes < 0 || 
-			    writtenbytes != nr_bytes_read) {
+			if (writtenbytes < 0 || writtenbytes != nr_bytes_read) {
 			    client_write_error = 1;
 				break;
 			}
+			body_bytes_written += writtenbytes;
 		}
 			
-		/* last escape hatch */
-		if (nr_bytes_read == 0)
-			break;
 	}
 	
+	cache_close_cachefile(C, cache_file);
+
 	/* handle the possible errors */
 	if (client_write_error) {
 		/* add a more explicit error message to the error_log
@@ -1178,24 +1201,23 @@ int receive_body(T C, apr_socket_t *socket, apr_file_t *cache_file)
 		DEBUG("Error writing to client. " 
 				"Bytes written/total bytes = %d/%d, " 
 				"User-Agent: %s", body_bytes_written, content_length, user_agent);
+		cache_flush(C);
 		return HTTP_BAD_GATEWAY;
 	}
 
 	if (cache_write_error) {
 		ERROR("Error writing to cache file");
-		ap_rflush(C->r);
+		cache_flush(C);
 		return HTTP_BAD_GATEWAY;
 	}
 
 	if (backend_read_error) {
 		ERROR("Error reading from backend");
+		cache_flush(C);
 		return C->r->status;
 	}
 	
-	/* everything went well. Close cache file and make sure
-	 * all content goes to the client */
-	cache_close_cachefile(C, cache_file);
-	ap_rflush(C->r);
+	cache_flush(C);
 
 	return OK;
 }
@@ -1469,17 +1491,24 @@ static int receive_complete_response(T C, apr_socket_t *socket)
 	int receive_body_result;
 	apr_file_t *cache_file = NULL;
 
-	if ((status = receive_status_line(C, socket)) == -1)
+	if ((status = receive_status_line(C, socket)) == -1) {
+		cache_flush(C);
 		return C->r->status;
+	}
 	
-	if (ap_is_HTTP_SERVER_ERROR(status)) /* = 50x */
+	if (ap_is_HTTP_SERVER_ERROR(status)) { /* = 50x */
+		cache_flush(C);
 		return C->r->status = HTTP_BAD_GATEWAY;
+	}
 
-	if (status == HTTP_NOT_MODIFIED)
+	if (status == HTTP_NOT_MODIFIED) {
+		cache_flush(C);
 		return C->r->status = status;
+	}
 	
 	if ((receive_headers_result = receive_headers(C, socket))) {
 		C->r->status = HTTP_BAD_GATEWAY;
+		cache_flush(C);
 		return receive_headers_result;
 	}
 	
@@ -1500,6 +1529,7 @@ static int receive_complete_response(T C, apr_socket_t *socket)
 	
 	if ((receive_body_result = receive_body(C, socket, cache_file))) {
 		C->r->status = HTTP_BAD_GATEWAY;
+		cache_flush(C);
 		return receive_body_result;
 	}
 
@@ -1606,6 +1636,7 @@ static int cache_update_fetch(T C)
 	if (send_complete_request(C, socket, dest_host_and_port, destpath, out_headers) == -1) {
 		apr_socket_close(socket);
 		C->r->status = HTTP_SERVICE_UNAVAILABLE;
+		cache_flush(C);
 		return DECLINED;
 	}	
 	
