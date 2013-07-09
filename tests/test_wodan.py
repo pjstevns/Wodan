@@ -128,6 +128,11 @@ class testWodan(unittest.TestCase):
         self.failUnless(r4.status == 200)
         self.failUnless(d4 == 'wodan -- slow response\n\n')
 
+    def test_POST(self):
+        (r1, d1) = request(self.cached, 'POST', '/index.html')
+        self.failUnless(r1.status == 200)
+        self.failUnless(d1 == '200 OK:wodan-test\n', d1)
+
 if __name__ == '__main__':
     runSlowServer()
     raw_input("Hit ENTER to continue")

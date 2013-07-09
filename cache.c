@@ -95,6 +95,34 @@ static inline int is_response_cacheable (int httpcode, int cache404s)
 	       	return 1;
 	return 0;
 }
+	
+static int cache_is_cacheable(T C)
+{
+	request_rec *r = C->r;
+
+	if(!is_cachedir_set(C)) {
+		ERROR("cachedir not set.");
+		return 0;
+	}
+
+	if (C->r->header_only) {
+		DEBUG("Response isn't cacheable: HEAD");
+		return 0;
+	}
+	if (C->r->method_number != M_GET) {
+		DEBUG("Response isn't cacheable: !GET");
+		return 0;
+	}
+	
+	if (!is_response_cacheable(C->r->status, C->config->cache_404s)) {
+		DEBUG("Response isn't cacheable: %d", C->r->status);
+		return 0;
+	}
+	if ((char *) ap_strcasestr(C->r->unparsed_uri, "cache=no") != NULL)
+		return 0;
+
+	return 1;
+}
 
 /**
  * return the name of the (nested) subdirectory used for
@@ -170,6 +198,9 @@ static int cache_filename(T C, char **filename)
 	int i;
 	request_rec *r = C->r;
 	struct apr_sha1_ctx_t sha;
+
+	if (! cache_is_cacheable(C))
+		return 0;
 
 	apr_array_header_t *headers;
 
@@ -940,25 +971,7 @@ apr_file_t *cache_get_cachefile(T C)
 	char *temp_dir;	
 	request_rec *r = C->r;
 
-	if(!is_cachedir_set(C)) {
-		ERROR("cachedir not set.");
-		return NULL;
-	}
-
-	if (C->r->header_only) {
-		DEBUG("Response isn't cacheable: HEAD");
-		return NULL;
-	}
-	if (C->r->method_number != M_GET) {
-		DEBUG("Response isn't cacheable: !GET");
-		return NULL;
-	}
-	
-	if (!is_response_cacheable(C->r->status, C->config->cache_404s)) {
-		DEBUG("Response isn't cacheable: %d", C->r->status);
-		return NULL;
-	}
-	if ((char *) ap_strcasestr(C->r->unparsed_uri, "cache=no") != NULL)
+	if (! cache_is_cacheable(C))
 		return NULL;
 
 	if ((expire = get_expire_time(C)) == NULL)
